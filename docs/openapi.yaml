@@ -4,7 +4,7 @@ info:
   description: Fetches observability traces from Arize Phoenix via an MCP wrapper.
   version: 1.0.0
 servers:
-  - url: https://[YOUR-CLOUD-RUN-URL]
+  - url: https://mcp-wrapper-818382083909.us-central1.run.app
 paths:
   /api/traces:
     post:
