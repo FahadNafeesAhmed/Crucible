@@ -1,0 +1,39 @@
+openapi: 3.0.0
+info:
+  title: Arize Phoenix MCP Tool
+  description: Fetches observability traces from Arize Phoenix via an MCP wrapper.
+  version: 1.0.0
+servers:
+  - url: https://[YOUR-CLOUD-RUN-URL]
+paths:
+  /api/traces:
+    post:
+      summary: Get failed traces
+      description: Fetches recent evaluation traces to identify blindspots in the detector.
+      operationId: getTraces
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_name:
+                  type: string
+                  description: The name of the Phoenix project (e.g. crucible).
+                  default: "crucible"
+                limit:
+                  type: integer
+                  description: Number of traces to fetch.
+                  default: 50
+      responses:
+        '200':
+          description: Successfully fetched traces.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  traces:
+                    type: string
+                    description: JSON string of trace data.

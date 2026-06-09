@@ -1,0 +1,28 @@
+# Core Agent
+google-genai
+google-adk
+
+# Observability & MCP
+arize-phoenix
+arize-phoenix-otel
+openinference-instrumentation-google-adk
+openinference-semantic-conventions
+mcp
+
+# Retry Logic
+tenacity
+
+# Local LLM Support
+ollama
+
+# Web Server
+fastapi
+uvicorn
+
+# Data
+kagglehub
+pandas
+
+# Utilities
+python-dotenv
+requests
