@@ -1,50 +1,60 @@
-from fastapi import FastAPI, HTTPException
-import asyncio
 import os
-from mcp import ClientSession
-from mcp.client.stdio import stdio_client, StdioServerParameters
-from pydantic import BaseModel
+import uvicorn
+from starlette.applications import Starlette
+from starlette.routing import Route, Mount
+from starlette.responses import Response
 
-app = FastAPI(title="Crucible MCP Cloud Run Wrapper")
+from mcp.server import Server
+from mcp.server.sse import SseServerTransport
+from crucible.obs.mcp_client import PhoenixMCPClient
 
-class TraceRequest(BaseModel):
-    project_name: str = "crucible"
-    limit: int = 50
+# 1. Initialize MCP server
+mcp_server = Server("crucible-phoenix-mcp-proxy")
 
-@app.post("/api/traces")
-async def get_traces(req: TraceRequest):
-    """
-    REST endpoint that wraps the stdio MCP client.
-    Google Cloud Agent Builder will call this endpoint.
-    """
-    server_params = StdioServerParameters(
-        command="npx",
-        args=["-y", "@arizeai/phoenix-mcp"],
-        env={
-            **os.environ,
-            "PHOENIX_API_KEY": os.environ.get("PHOENIX_API_KEY", ""),
-            "PHOENIX_HOST": os.environ.get("PHOENIX_HOST", "https://app.phoenix.arize.com")
+@mcp_server.list_tools()
+async def list_tools():
+    return [
+        {
+            "name": "list-traces",
+            "description": "Fetch the latest observability traces from Arize Phoenix",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Number of traces to fetch"}
+                }
+            }
         }
-    )
+    ]
 
-    try:
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                
-                result = await session.call_tool(
-                    "list-traces",
-                    arguments={
-                        "project_name": req.project_name,
-                        "limit": req.limit
-                    }
-                )
-                
-                return {"traces": result.content[0].text}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@mcp_server.call_tool()
+async def call_tool(name: str, arguments: dict):
+    if name == "list-traces":
+        limit = arguments.get("limit", 50)
+        client = PhoenixMCPClient()
+        traces = await client._fetch_from_mcp(limit=limit)
+        return [{"type": "text", "text": traces}]
+    raise ValueError(f"Tool {name} not found")
+
+# 2. Setup SSE Transport
+sse = SseServerTransport("/messages/")
+
+async def handle_sse(request):
+    async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+        await mcp_server.run(
+            streams[0],
+            streams[1],
+            mcp_server.create_initialization_options()
+        )
+    return Response()
+
+# 3. Configure Starlette routes
+routes = [
+    Route("/sse", endpoint=handle_sse),
+    Mount("/messages/", app=sse.handle_post_message),
+]
+
+app = Starlette(routes=routes)
 
 if __name__ == "__main__":
-    import uvicorn
-    # Typically Cloud Run runs on port 8080
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
