@@ -8,22 +8,23 @@ RUN apt-get update && apt-get install -y curl && \
 
 WORKDIR /app
 
-# Install ONLY the minimal Python deps for the Streamable HTTP proxy
+# Install ONLY the minimal Python deps needed for the SSE proxy
 RUN pip install --no-cache-dir \
-    "mcp[cli]" \
+    mcp \
     starlette \
+    sse-starlette \
     uvicorn \
     httpx
 
-# Copy only the wrapper code (no agent dependencies needed)
+# Copy only the wrapper code
 COPY crucible/__init__.py crucible/__init__.py
 COPY crucible/obs/__init__.py crucible/obs/__init__.py
 COPY crucible/obs/mcp_cloud_run_wrapper.py crucible/obs/mcp_cloud_run_wrapper.py
 
-# Pre-install the Phoenix MCP npm package so first call is fast
+# Pre-install the Phoenix MCP package so first call is fast
 RUN npx -y @arizeai/phoenix-mcp@latest --version || true
 
 EXPOSE 8080
 
-# Run via python -m so the __main__ block starts the streamable-http server
-CMD ["python", "-m", "crucible.obs.mcp_cloud_run_wrapper"]
+# Run the self-contained MCP SSE proxy via uvicorn
+CMD ["uvicorn", "crucible.obs.mcp_cloud_run_wrapper:app", "--host", "0.0.0.0", "--port", "8080"]
