@@ -26,8 +26,8 @@ class PhoenixMCPClient:
     async def _fetch_from_mcp(self, limit=5):
         """Connects to the official Arize Phoenix MCP server to pull trace metadata."""
         api_key = os.getenv("PHOENIX_API_KEY", "")
-        base_url = "https://app.phoenix.arize.com"
-        
+        base_url = os.getenv("PHOENIX_HOST") or os.getenv("PHOENIX_COLLECTOR_ENDPOINT") or "https://app.phoenix.arize.com"
+
         server_params = StdioServerParameters(
             command="npx.cmd" if os.name == 'nt' else "npx",
             args=["-y", "@arizeai/phoenix-mcp@latest"],

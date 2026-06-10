@@ -19,7 +19,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from crucible.agent.detector import DetectorAgent
 from crucible.adversary.forger import ForgerAgent
-from crucible.agent.reflector_adk import crucible_reflector_agent
+from crucible.agent.reflector_adk import reflect_via_adk
 from crucible.obs.mcp_client import PhoenixMCPClient
 from crucible.obs.instrumentation import setup_instrumentation, flush_traces
 from crucible.data.load_ott import load_ott_data
@@ -32,10 +32,14 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 logger = logging.getLogger("crucible.eval")
 
 
-def get_fixed_ott_benchmark(df, limit=2):
+def get_fixed_ott_benchmark(df, limit=6):
     """Sample a fixed, balanced benchmark set from the Ott dataset."""
-    real_subset = df[df['deceptive'] == 'truthful'].sample(n=limit//2, random_state=42)
-    fake_subset = df[df['deceptive'] == 'deceptive'].sample(n=limit//2, random_state=42)
+    real_pool = df[df['deceptive'] == 'truthful']
+    fake_pool = df[df['deceptive'] == 'deceptive']
+    # Clamp the requested count to what's actually available (fallback sample is small)
+    n_each = max(1, min(limit // 2, len(real_pool), len(fake_pool)))
+    real_subset = real_pool.sample(n=n_each, random_state=42)
+    fake_subset = fake_pool.sample(n=n_each, random_state=42)
     
     formatted = []
     # Add real reviews
@@ -92,63 +96,89 @@ def run_eval_loop(iterations=2):
     
     # Load the Ott dataset into memory once
     df = load_ott_data()
-    # Drastically reduce the limit from 150 to 2 to save tokens (1 real, 1 fake per round)
-    benchmark_set = get_fixed_ott_benchmark(df, limit=2)
-    
+    benchmark_set = get_fixed_ott_benchmark(df, limit=6)
+
     # Track accuracy across rounds for the summary table
     round_results = []
-    
+
     for round_num in range(1, iterations + 1):
         print_header(f"ITERATION {round_num} / {iterations}", "-")
-               # === MOCK EVALUATION FOR FAST DEMO ===
-        # Bypass API rate limits and immediately trigger the ADK agent.
-        print(f"  [Grader] Benchmark Accuracy (Ott): 50.0% (1/2)")
-        print(f"  [Grader] Adversarial Catch Rate:   0.0% (0/2)")
-        
-        failures_to_learn = [{"text": "This is a fake review.", "true_label": "fake", "reasoning": "Mock"}]
-        
-        if failures_to_learn:
-            print(f"  [Reflector] Activating ADK Agent to inspect traces via MCP...")
-            
-            import asyncio
-            import uuid
-            from google.adk.runners import InMemoryRunner
-            from google.genai import types
 
-            async def run_adk_reflector():
-                new_rule = ""
-                sess_id = str(uuid.uuid4())
-                runner = InMemoryRunner(agent=crucible_reflector_agent, app_name="crucible_app")
-                await runner.session_service.create_session(user_id="crucible", session_id=sess_id, app_name="crucible_app")
-                
-                async for event in runner.run_async(
-                    user_id="crucible",
-                    session_id=sess_id,
-                    new_message=types.Content(
-                        role="user",
-                        parts=[types.Part.from_text(text="Please analyze the latest Phoenix traces for the project 'crucible' and output exactly ONE new detection rule.")]
-                    )
-                ):
-                    if hasattr(event, 'content') and event.content:
-                        for part in event.content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                new_rule += part.text
-                return new_rule.strip()
-            
+        # 1. Forger generates adversarial fakes exploiting the detector's known blindspots
+        fake_texts = forger.generate_fakes(
+            "The Palmer House Hilton",
+            count=4,
+            detector_blindspots=detector.blindspots,
+        )
+        adversarial_data = []
+        for idx, text in enumerate(fake_texts):
+            logger.info(f"[Forger] Fake {idx + 1}: {text[:80]}...")
+            mock_tuple = (9000 + round_num * 10 + idx, "The Palmer House Hilton", text, 5.0, "2023-01-01", "forger_bot", 1)
+            adversarial_data.append({
+                "tuple": mock_tuple,
+                "text": text,
+                "true_label": "fake",
+                "source": "adversarial",
+            })
+
+        # 2. Shuffle benchmark + adversarial and evaluate with the Detector
+        test_set = benchmark_set + adversarial_data
+        random.shuffle(test_set)
+        tuples_to_analyze = [d["tuple"] for d in test_set]
+
+        print(f"\n  [Grader] Auditing {len(tuples_to_analyze)} reviews ({len(benchmark_set)} benchmark + {len(adversarial_data)} adversarial)...")
+        verdicts = detector.analyze_reviews(tuples_to_analyze)
+        verdict_by_id = {v["id"]: v for v in verdicts}
+
+        # 3. Grade
+        bench_correct = 0
+        adv_correct = 0
+        failed_adv_reviews = []
+        failed_bench_reviews = []
+        for d in test_set:
+            v = verdict_by_id.get(d["tuple"][0], {"verdict": "real", "reasoning": "missing"})
+            guessed_label = v["verdict"]
+            reasoning = v.get("reasoning", "No reasoning provided.")
+            is_correct = guessed_label == d["true_label"]
+
+            if d["source"] == "benchmark":
+                if is_correct:
+                    bench_correct += 1
+                else:
+                    failed_bench_reviews.append({"text": d["text"], "true_label": d["true_label"], "guessed_label": guessed_label, "reasoning": reasoning})
+            else:
+                if is_correct:
+                    adv_correct += 1
+                else:
+                    failed_adv_reviews.append({"text": d["text"], "true_label": d["true_label"], "guessed_label": guessed_label, "reasoning": reasoning})
+                print_review_result("Adv Fake", d['text'][:80], d['true_label'], guessed_label, reasoning, is_correct)
+
+        bench_acc = (bench_correct / len(benchmark_set)) * 100 if benchmark_set else 0
+        adv_acc = (adv_correct / len(adversarial_data)) * 100 if adversarial_data else 0
+        round_results.append({"round": round_num, "bench_acc": bench_acc, "adv_acc": adv_acc})
+
+        print(f"\n  [Grader] Benchmark Accuracy (Ott): {bench_acc:.1f}% ({bench_correct}/{len(benchmark_set)})")
+        print(f"  [Grader] Adversarial Catch Rate:   {adv_acc:.1f}% ({adv_correct}/{len(adversarial_data)})")
+
+        # 4. Reflector: Google ADK agent inspects Phoenix traces via the Arize MCP server
+        failures_to_learn = failed_adv_reviews if failed_adv_reviews else failed_bench_reviews[:2]
+        if failures_to_learn:
+            print(f"  [Reflector] Activating Google ADK Agent to inspect traces via Arize Phoenix MCP...")
             try:
-                rule_text = asyncio.run(run_adk_reflector())
-                print(f"  [Reflector] Generated Rule: {rule_text}")
-                
-                # Append the new rule to the detector's blindspots
-                detector.blindspots += f"\n- {rule_text}"
-                print(f"  [Reflector] Detector prompt updated for next round.")
+                rule_text = reflect_via_adk(failed_reviews=failures_to_learn)
+                if rule_text:
+                    print(f"  [Reflector] Generated Rule: {rule_text}")
+                    if detector.blindspots == "None":
+                        detector.blindspots = f"1. {rule_text}"
+                    else:
+                        count = len(detector.blindspots.strip().split("\n")) + 1
+                        detector.blindspots += f"\n{count}. {rule_text}"
+                    print(f"  [Reflector] Detector prompt updated for next round.")
             except Exception as e:
                 print(f"  [Reflector] ADK Agent Error: {e}")
         else:
             print(f"  [Grader] Perfect score across the board! No failures to learn from.")
-            if round_num < iterations:
-                print(f"  [Grader] Proceeding to next round with current rules.")
-    
+
     # ---------------------------------------------------------------------------
     # Summary Table
     # ---------------------------------------------------------------------------
@@ -176,7 +206,8 @@ def run_eval_loop_stream(iterations=2):
     forger = ForgerAgent()  # Single instance, preserves iteration state
     
     df = load_ott_data()
-    benchmark_set = get_fixed_ott_benchmark(df, limit=40)
+    # Keep the live demo snappy: small balanced benchmark + a few adversarial fakes per round.
+    benchmark_set = get_fixed_ott_benchmark(df, limit=6)
     
     round_results = []
     
@@ -274,8 +305,19 @@ def run_eval_loop_stream(iterations=2):
         }
         
         if false_positives or false_negatives:
-            yield json.dumps({"type": "info", "content": f"[Reflector] Analyzing {len(false_positives)} FP(s) and {len(false_negatives)} FN(s)..."}) + "\n"
-            detector.update_blindspots(failed_reviews=failures_dict)
+            yield json.dumps({"type": "info", "content": f"[Reflector] Activating Google ADK Agent to inspect Phoenix traces via Arize MCP ({len(false_positives)} FP / {len(false_negatives)} FN)..."}) + "\n"
+            try:
+                rule_text = reflect_via_adk(failed_reviews=failures_dict)
+            except Exception as e:
+                rule_text = ""
+                yield json.dumps({"type": "info", "content": f"[Reflector] ADK Agent error: {e}"}) + "\n"
+
+            if rule_text:
+                if detector.blindspots == "None":
+                    detector.blindspots = f"1. {rule_text}"
+                else:
+                    count = len(detector.blindspots.strip().split("\n")) + 1
+                    detector.blindspots += f"\n{count}. {rule_text}"
             yield json.dumps({"type": "rules_updated", "rules": detector.blindspots}) + "\n"
         else:
             yield json.dumps({"type": "info", "content": "[Grader] Perfect score across the board! No failures to learn from."}) + "\n"

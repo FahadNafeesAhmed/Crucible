@@ -3,3 +3,11 @@ venv/
 data/
 *.db
 __pycache__/
+server.log
+.claude/
+
+# Keep the dataset loader package in source control (only ignore cached data files)
+!crucible/data/
+!crucible/data/*.py
+crucible/data/ott.csv
+crucible/data/*.db

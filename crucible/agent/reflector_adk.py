@@ -22,7 +22,7 @@ class GlobalGemini(Gemini):
 
 # Configure the local Phoenix MCP via Stdio
 api_key = os.environ.get("PHOENIX_API_KEY", "")
-base_url = "https://app.phoenix.arize.com"
+base_url = os.environ.get("PHOENIX_HOST") or os.environ.get("PHOENIX_COLLECTOR_ENDPOINT") or "https://app.phoenix.arize.com"
 env = {**os.environ, "PHOENIX_API_KEY": api_key, "PHOENIX_HOST": base_url}
 
 server_params = StdioServerParameters(
@@ -56,3 +56,53 @@ Example: "Rule: Watch out for reviews that heavily praise the lobby but are vagu
 ''',
     tools=[mcp_toolset],
 )
+
+
+async def reflect_via_adk_async(failed_reviews=None) -> str:
+    """
+    Run the Google ADK Reflector Agent. The agent autonomously calls the
+    Arize Phoenix MCP server (list-traces / get-trace-details) to inspect the
+    detector's failure traces and returns exactly ONE new detection rule.
+
+    `failed_reviews` (optional dict/list) is appended to the prompt so the
+    agent has the exact failing payloads in addition to the live MCP traces.
+    """
+    import uuid
+    from google.adk.runners import InMemoryRunner
+    from google.genai import types
+
+    message = (
+        "Please analyze the latest Phoenix traces for the project 'crucible' "
+        "using your MCP tools and output exactly ONE new detection rule."
+    )
+    if failed_reviews:
+        message += f"\n\nFor additional context, here are the exact failing reviews:\n{failed_reviews}"
+
+    new_rule = ""
+    sess_id = str(uuid.uuid4())
+    runner = InMemoryRunner(agent=crucible_reflector_agent, app_name="crucible_app")
+    await runner.session_service.create_session(
+        user_id="crucible", session_id=sess_id, app_name="crucible_app"
+    )
+
+    async for event in runner.run_async(
+        user_id="crucible",
+        session_id=sess_id,
+        new_message=types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=message)],
+        ),
+    ):
+        if hasattr(event, "content") and event.content:
+            for part in event.content.parts:
+                if hasattr(part, "text") and part.text:
+                    new_rule += part.text
+
+    return new_rule.strip()
+
+
+def reflect_via_adk(failed_reviews=None) -> str:
+    """Synchronous wrapper around the ADK Reflector Agent."""
+    import asyncio
+
+    return asyncio.run(reflect_via_adk_async(failed_reviews=failed_reviews))

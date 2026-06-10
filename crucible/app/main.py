@@ -9,7 +9,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from crucible.agent.detector import DetectorAgent
 from crucible.obs.mcp_client import PhoenixMCPClient
 from crucible.loop.eval import run_eval_loop_stream
-from datasets import load_dataset
 import threading
 import json
 import asyncio
@@ -80,7 +79,7 @@ def pipeline_runner():
     state.reset()
     state.running = True
     try:
-        for raw_event in run_eval_loop_stream(iterations=5):
+        for raw_event in run_eval_loop_stream(iterations=3):
             if state.stop_requested:
                 state.logs.append("[server] pipeline stopped by user.")
                 break
@@ -190,6 +189,7 @@ def HTMLTemplate(results_html=""):
 def fetch_and_cache_huggingface_reviews(search_query: str, conn: sqlite3.Connection):
     print(f"Cache miss for '{search_query}'. Streaming from Hugging Face...")
     try:
+        from datasets import load_dataset
         dataset = load_dataset("McAuley-Lab/Amazon-Reviews-2023", "raw_review_All_Beauty", split="full", streaming=True, trust_remote_code=True)
         
         hf_reviews = []
