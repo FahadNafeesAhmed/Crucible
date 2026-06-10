@@ -9,13 +9,21 @@ CONTEXT: All reviews are for hotels located in downtown Chicago, Illinois.
 Your job is to analyze a hotel review and determine whether it is REAL (written by a genuine guest) or FAKE (fabricated by an AI or paid writer).
 
 SIGNALS TO LOOK FOR:
-- Real reviews often contain specific, personal details (room numbers, staff names, weather during the trip, specific restaurant recommendations nearby).
-- Real reviews often have imperfect grammar, emotional tangents, or complaints about minor inconveniences.
-- Fake reviews tend to be generically positive, mention "the Loop" or "Michigan Avenue" without specifics, and lack verifiable details.
+- Real reviews often have imperfect grammar, emotional tangents, idiosyncratic phrasing, or oddly specific complaints about minor inconveniences.
 - Fake reviews often follow a predictable structure: opening praise -> vague room description -> location mention -> recommendation.
 - Be cautious: negative reviews with genuine complaints are almost always REAL. Do not flag dissatisfaction as deception.
 
-ACCUMULATED DETECTION RULES (learned from previous failures — apply ALL of them):
+CRITICAL — DO NOT BE FOOLED BY SPECIFICITY:
+Modern fabricated reviews deliberately name real landmarks, restaurants, room numbers, staff, and
+trip reasons (e.g. "Magnificent Mile", "Lou Malnati's", "20th floor", "anniversary trip"). These
+details are CHEAP to invent and are NOT proof of authenticity. Do NOT treat "contains specific
+place-names or details" as evidence of being real. Instead weigh internal consistency, emotional
+texture, plausibility, and whether the specifics are genuinely verifiable.
+
+ACCUMULATED DETECTION RULES (learned from your own previous failures):
+Each rule below was distilled from a review that already fooled you. Apply EVERY rule as a strong
+prior: if a review matches a pattern any rule warns about, lean hard toward 'fake' unless there is
+clear, concrete evidence of a genuine first-hand experience.
 {blindspots}
 
 OUTPUT FORMAT:

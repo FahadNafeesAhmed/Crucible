@@ -32,6 +32,61 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%H:%M:%S")
 logger = logging.getLogger("crucible.eval")
 
 
+def _clean_rule(rule_text):
+    """Extract a single clean rule sentence from the agent's output.
+
+    Defends against the agent emitting extra lines: prefer a line containing
+    'Rule:', else the last substantive line; then strip numbering/bullets/prefix.
+    """
+    import re
+    raw = (rule_text or "").strip()
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    chosen = ""
+    for ln in lines:                                   # prefer an explicit "Rule:" line
+        if re.search(r'\brule\s*:', ln, re.I):
+            chosen = ln
+    if not chosen:
+        # last line that looks like an actual rule (has several words), not a label
+        for ln in reversed(lines):
+            if len(ln.split()) >= 4:
+                chosen = ln
+                break
+    if not chosen:
+        chosen = lines[-1] if lines else raw
+    t = re.sub(r'(?i)^\s*rule\s*:\s*', '', chosen)     # drop leading "Rule:"
+    t = re.sub(r'^\s*(?:\d+[\.\)]\s*)+', '', t)         # leading "1." / "14."
+    t = re.sub(r'^\s*[-*•]\s*', '', t)               # leading bullet
+    return t.strip()
+
+
+def _similar(a, b):
+    """Cheap near-duplicate check via word-overlap (Jaccard) on lowercased tokens."""
+    wa = set(w for w in __import__('re').findall(r'[a-z]+', a.lower()) if len(w) > 3)
+    wb = set(w for w in __import__('re').findall(r'[a-z]+', b.lower()) if len(w) > 3)
+    if not wa or not wb:
+        return False
+    overlap = len(wa & wb) / len(wa | wb)
+    return overlap >= 0.6
+
+
+def append_blindspot(detector, rule_text):
+    """Clean, de-duplicate and append a learned rule to the detector. Returns True if added."""
+    rule = _clean_rule(rule_text)
+    if not rule:
+        return False
+    existing = [] if detector.blindspots == "None" else [
+        _clean_rule(line) for line in detector.blindspots.strip().split("\n")
+    ]
+    if any(_similar(rule, e) for e in existing):
+        return False  # skip near-duplicate of an existing rule
+    count = len(existing) + 1
+    if detector.blindspots == "None":
+        detector.blindspots = f"1. {rule}"
+    else:
+        detector.blindspots += f"\n{count}. {rule}"
+    return True
+
+
 def get_fixed_ott_benchmark(df, limit=6):
     """Sample a fixed, balanced benchmark set from the Ott dataset."""
     real_pool = df[df['deceptive'] == 'truthful']
@@ -167,13 +222,11 @@ def run_eval_loop(iterations=2):
             try:
                 rule_text = reflect_via_adk(failed_reviews=failures_to_learn, current_rules=detector.blindspots)
                 if rule_text:
-                    print(f"  [Reflector] Generated Rule: {rule_text}")
-                    if detector.blindspots == "None":
-                        detector.blindspots = f"1. {rule_text}"
+                    if append_blindspot(detector, rule_text):
+                        print(f"  [Reflector] Generated Rule: {_clean_rule(rule_text)}")
+                        print(f"  [Reflector] Detector prompt updated for next round.")
                     else:
-                        count = len(detector.blindspots.strip().split("\n")) + 1
-                        detector.blindspots += f"\n{count}. {rule_text}"
-                    print(f"  [Reflector] Detector prompt updated for next round.")
+                        print(f"  [Reflector] Rule was a near-duplicate of an existing one; skipped.")
             except Exception as e:
                 print(f"  [Reflector] ADK Agent Error: {e}")
         else:
@@ -206,18 +259,20 @@ def run_eval_loop_stream(iterations=2):
     forger = ForgerAgent()  # Single instance, preserves iteration state
     
     df = load_ott_data()
-    # Keep the live demo snappy: small balanced benchmark + a few adversarial fakes per round.
-    benchmark_set = get_fixed_ott_benchmark(df, limit=6)
-    
+    # Balanced benchmark (10) + a few adversarial fakes (4) per round — enough for a
+    # smooth, believable accuracy curve while still finishing quickly on camera.
+    benchmark_set = get_fixed_ott_benchmark(df, limit=10)
+    ADV_PER_ROUND = 4
+
     round_results = []
-    
+
     for round_num in range(1, iterations + 1):
         yield json.dumps({"type": "round_start", "round": round_num, "total_rounds": iterations}) + "\n"
-        
-        yield json.dumps({"type": "info", "content": f"[Forger] Generating 2 adversarial fakes for 'The Drake' (Round {round_num})..."}) + "\n"
+
+        yield json.dumps({"type": "info", "content": f"[Forger] Generating {ADV_PER_ROUND} adversarial fakes for 'The Drake' (Round {round_num})..."}) + "\n"
         fake_texts = forger.generate_fakes(
-            "The Drake", 
-            count=2, 
+            "The Drake",
+            count=ADV_PER_ROUND,
             detector_blindspots=detector.blindspots
         )
         
@@ -313,11 +368,7 @@ def run_eval_loop_stream(iterations=2):
                 yield json.dumps({"type": "info", "content": f"[Reflector] ADK Agent error: {e}"}) + "\n"
 
             if rule_text:
-                if detector.blindspots == "None":
-                    detector.blindspots = f"1. {rule_text}"
-                else:
-                    count = len(detector.blindspots.strip().split("\n")) + 1
-                    detector.blindspots += f"\n{count}. {rule_text}"
+                append_blindspot(detector, rule_text)
             yield json.dumps({"type": "rules_updated", "rules": detector.blindspots}) + "\n"
         else:
             yield json.dumps({"type": "info", "content": "[Grader] Perfect score across the board! No failures to learn from."}) + "\n"

@@ -120,7 +120,9 @@ async def reflect_via_adk_async(failed_reviews=None, current_rules="None") -> st
 
     toolset = _build_mcp_toolset()
     agent = _build_reflector_agent(toolset)
-    new_rule = ""
+    # Keep only the agent's FINAL text turn — not its intermediate tool-call
+    # narration / scratchpad — so we store just the rule, never the reasoning.
+    last_text = ""
     try:
         sess_id = str(uuid.uuid4())
         runner = InMemoryRunner(agent=agent, app_name="crucible_app")
@@ -136,10 +138,13 @@ async def reflect_via_adk_async(failed_reviews=None, current_rules="None") -> st
                 parts=[types.Part.from_text(text=message)],
             ),
         ):
-            if hasattr(event, "content") and event.content:
-                for part in event.content.parts:
-                    if hasattr(part, "text") and part.text:
-                        new_rule += part.text
+            if hasattr(event, "content") and event.content and event.content.parts:
+                cur = "".join(
+                    p.text for p in event.content.parts
+                    if hasattr(p, "text") and p.text
+                )
+                if cur.strip():
+                    last_text = cur  # overwrite — final non-empty turn wins
     finally:
         # Tear down the MCP stdio connection bound to this event loop.
         try:
@@ -147,7 +152,7 @@ async def reflect_via_adk_async(failed_reviews=None, current_rules="None") -> st
         except Exception:
             pass
 
-    return new_rule.strip()
+    return last_text.strip()
 
 
 def reflect_via_adk(failed_reviews=None, current_rules="None") -> str:
