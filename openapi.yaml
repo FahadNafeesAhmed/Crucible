@@ -1,0 +1,74 @@
+openapi: 3.0.0
+info:
+  title: Crucible Backend API
+  description: API for the Crucible multi-agent eval loop, providing datasets and observability tools.
+  version: 1.0.0
+servers:
+  - url: https://mcp-wrapper-818382083909.us-central1.run.app
+    description: Cloud Run Backend
+paths:
+  /api/phoenix/traces:
+    get:
+      summary: List latest Phoenix traces
+      description: Fetches the latest evaluation traces from Arize Phoenix.
+      operationId: list_traces
+      parameters:
+        - name: project_identifier
+          in: query
+          required: false
+          schema:
+            type: string
+            default: crucible
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dataset/sample:
+    get:
+      summary: Get Sample Review
+      description: Fetches a random review from the Ott benchmark dataset to evaluate.
+      operationId: get_sample_review
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+                  hotel:
+                    type: string
+                  true_label:
+                    type: string
+  /api/phoenix/blindspots:
+    post:
+      summary: Update Blindspots
+      description: Save a new rule or blindspot learned by the Reflector agent.
+      operationId: update_blindspots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                new_rule:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object

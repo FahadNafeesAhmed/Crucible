@@ -1,21 +1,23 @@
 FROM python:3.11-slim
 
+# Install Node.js for npx (required to spawn @arizeai/phoenix-mcp)
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Install dependencies first (cache layer)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies
+RUN pip install --no-cache-dir fastapi uvicorn mcp pandas
 
-# Copy application code
-COPY . .
+# Copy code
+COPY crucible/ crucible/
 
-# Environment variables (override at deploy time)
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONUTF8=1
+# Pre-install the Phoenix MCP package so first call is fast
+RUN npx -y @arizeai/phoenix-mcp@latest --version || true
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s \
-  CMD python -c "import requests; requests.get('http://localhost:8080/')" || exit 1
+EXPOSE 8080
 
-# Run the FastAPI server
-CMD ["uvicorn", "crucible.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run the OpenAPI backend
+CMD ["uvicorn", "crucible.obs.crucible_api:app", "--host", "0.0.0.0", "--port", "8080"]
