@@ -3,9 +3,9 @@ import os
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-# We need to set PHOENIX_API_KEY and PHOENIX_HOST
-api_key = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJBcGlLZXk6MyJ9.Do0XPGBHY7V_A0Q6UVO1nz5pkIKwLP9Y8cxd1pfEjgs"
-base_url = "https://app.phoenix.arize.com"
+# We need to set PHOENIX_API_KEY and PHOENIX_HOST (read from environment — never hard-code secrets)
+api_key = os.environ.get("PHOENIX_API_KEY", "")
+base_url = os.environ.get("PHOENIX_HOST") or os.environ.get("PHOENIX_COLLECTOR_ENDPOINT") or "https://app.phoenix.arize.com"
 
 async def run():
     server_params = StdioServerParameters(
