@@ -139,7 +139,7 @@ class DetectorAgent:
             # Use ThreadPoolExecutor to run API calls in parallel
             import os
             backend = os.getenv("LLM_BACKEND", "gemini").lower()
-            workers = 1 if backend == "huggingface" else 5
+            workers = 1
             
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 # Map the reviews to the executor
