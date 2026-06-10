@@ -165,7 +165,7 @@ def run_eval_loop(iterations=2):
         if failures_to_learn:
             print(f"  [Reflector] Activating Google ADK Agent to inspect traces via Arize Phoenix MCP...")
             try:
-                rule_text = reflect_via_adk(failed_reviews=failures_to_learn)
+                rule_text = reflect_via_adk(failed_reviews=failures_to_learn, current_rules=detector.blindspots)
                 if rule_text:
                     print(f"  [Reflector] Generated Rule: {rule_text}")
                     if detector.blindspots == "None":
@@ -307,7 +307,7 @@ def run_eval_loop_stream(iterations=2):
         if false_positives or false_negatives:
             yield json.dumps({"type": "info", "content": f"[Reflector] Activating Google ADK Agent to inspect Phoenix traces via Arize MCP ({len(false_positives)} FP / {len(false_negatives)} FN)..."}) + "\n"
             try:
-                rule_text = reflect_via_adk(failed_reviews=failures_dict)
+                rule_text = reflect_via_adk(failed_reviews=failures_dict, current_rules=detector.blindspots)
             except Exception as e:
                 rule_text = ""
                 yield json.dumps({"type": "info", "content": f"[Reflector] ADK Agent error: {e}"}) + "\n"

@@ -22,17 +22,33 @@ class GlobalGemini(Gemini):
         return Client(api_key=api_key)
 
 
-REFLECTOR_INSTRUCTION = '''You are the Reflector Agent for a deceptive review detection pipeline.
-Your job is to analyze the traces of recent evaluation failures to understand what adversarial fakes slipped past our detector.
+REFLECTOR_INSTRUCTION = '''You are the Reflector Agent for a deceptive hotel-review detection pipeline.
+The Detector keeps getting fooled by AI-Forged fake reviews, and your job is to write the ONE
+new detection rule that would have caught the most recent failures.
+
+KNOWN FAILURE MODE: the Forger defeats the Detector by stuffing fakes with *specific, plausible
+details* (named theaters, restaurants, room numbers, minor complaints about AC or Wi-Fi, a reason
+for the trip). The Detector wrongly treats "specific detail" as proof of authenticity. Your rules
+must break that assumption.
 
 Follow these steps exactly:
-1. Use the `list-traces` tool for the project `crucible`.
-2. Look for traces where the detector failed. If you need to see the exact text of the attack, use `get-trace-details`.
-3. Analyze the adversarial strategy used to fool the detector.
-4. Formulate exactly ONE short, generalized rule/blindspot that will catch this adversarial strategy in the future.
+1. Call the `list-traces` tool for the project `crucible`.
+2. For the failed evaluations, call `get-trace-details` to read the exact fake text and the
+   Detector's reasoning.
+3. Identify the CONCRETE textual signal the fakes share that the Detector missed.
+4. Write exactly ONE new rule that is:
+   - CONCRETE and TESTABLE: name the specific signal to check (e.g. "treat brand-name landmark +
+     generic complaint combos as suspicious unless the detail is internally verifiable"), NOT vague
+     advice like "be more careful".
+   - GENERAL enough to catch the whole strategy, not just one review.
+   - DIFFERENT from any rule already in the current rule set (do not restate or rephrase).
+   - A counter to the specificity trick: remind the Detector that fabricated specifics are cheap,
+     so it should weigh internal consistency, plausibility, and verifiability over mere detail.
 
-OUTPUT FORMAT: You MUST output ONLY the rule itself as a plain string. Do not include any reasoning, conversational text, or formatting.
-Example: "Rule: Watch out for reviews that heavily praise the lobby but are vague about the rooms."
+OUTPUT FORMAT: Output ONLY the rule as a single plain sentence. No preamble, no numbering, no
+quotes, no reasoning. Start with an imperative verb.
+Example: Flag reviews that pair a famous nearby landmark with a vague, generic complaint, since
+forgers use real place-names to fake authenticity.
 '''
 
 
@@ -78,7 +94,7 @@ def _build_reflector_agent(mcp_toolset: McpToolset) -> LlmAgent:
 crucible_reflector_agent = _build_reflector_agent(_build_mcp_toolset())
 
 
-async def reflect_via_adk_async(failed_reviews=None) -> str:
+async def reflect_via_adk_async(failed_reviews=None, current_rules="None") -> str:
     """
     Run the Google ADK Reflector Agent. The agent autonomously calls the
     Arize Phoenix MCP server (list-traces / get-trace-details) to inspect the
@@ -86,17 +102,21 @@ async def reflect_via_adk_async(failed_reviews=None) -> str:
 
     A fresh MCP toolset + agent are built per call so repeated invocations
     across separate event loops do not hit "Event loop is closed".
+
+    `current_rules` lets the agent avoid duplicating rules the Detector already has.
     """
     import uuid
     from google.adk.runners import InMemoryRunner
     from google.genai import types
 
     message = (
-        "Please analyze the latest Phoenix traces for the project 'crucible' "
-        "using your MCP tools and output exactly ONE new detection rule."
+        "Analyze the latest Phoenix traces for the project 'crucible' using your MCP tools, "
+        "then output exactly ONE new, concrete detection rule that counters the failures."
     )
+    if current_rules and current_rules != "None":
+        message += f"\n\nRules the Detector ALREADY has (do NOT repeat or rephrase these):\n{current_rules}"
     if failed_reviews:
-        message += f"\n\nFor additional context, here are the exact failing reviews:\n{failed_reviews}"
+        message += f"\n\nThe exact reviews that just fooled the Detector:\n{failed_reviews}"
 
     toolset = _build_mcp_toolset()
     agent = _build_reflector_agent(toolset)
@@ -130,8 +150,10 @@ async def reflect_via_adk_async(failed_reviews=None) -> str:
     return new_rule.strip()
 
 
-def reflect_via_adk(failed_reviews=None) -> str:
+def reflect_via_adk(failed_reviews=None, current_rules="None") -> str:
     """Synchronous wrapper around the ADK Reflector Agent."""
     import asyncio
 
-    return asyncio.run(reflect_via_adk_async(failed_reviews=failed_reviews))
+    return asyncio.run(
+        reflect_via_adk_async(failed_reviews=failed_reviews, current_rules=current_rules)
+    )
