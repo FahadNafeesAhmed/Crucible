@@ -418,6 +418,13 @@ document.addEventListener('DOMContentLoaded', async function() {
       + '</div>';
     demo.insertAdjacentElement('afterend', sec);
     try{ injectChallenge(sec); }catch(e){}
+    try{ var _tbr=document.querySelector('.topbar .right');
+      if(_tbr && !document.getElementById('cz-gh')){
+        var _gh=document.createElement('a'); _gh.id='cz-gh';
+        _gh.href='https://github.com/FahadNafeesAhmed/Crucible'; _gh.target='_blank'; _gh.rel='noopener';
+        _gh.className='demo'; _gh.textContent='GITHUB ↗'; _gh.style.marginLeft='18px';
+        _tbr.appendChild(_gh);
+      } }catch(e){}
     czDrawResult(window.__czSeries);
     wire();
     return true;
