@@ -255,6 +255,128 @@ document.addEventListener('DOMContentLoaded', async function() {
     mount.innerHTML=czDraw(series, !!(series&&series.length));
   }
 
+  /* ---------------- Challenge the Detector (human-in-the-loop) ---------------- */
+  function injectChallenge(afterEl){
+    if(document.getElementById('cz-challenge')) return;
+    var css = ''
+      + '#cz-challenge .czx-card{background:#F4F2EC;border:1px solid #D6D2C6;border-radius:14px;padding:18px;color:#1A1A17}'
+      + '#cz-challenge textarea{width:100%;min-height:84px;border:1px solid #D6D2C6;border-radius:10px;padding:11px 13px;font:400 14px/1.5 -apple-system,sans-serif;background:#FBFAF7;color:#1A1A17;resize:vertical;box-sizing:border-box}'
+      + '#cz-challenge .czx-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}'
+      + '#cz-challenge .czx-btn{font:600 13px/1 sans-serif;border-radius:9px;padding:10px 16px;cursor:pointer;border:1px solid #D6D2C6;background:#FBFAF7;color:#1A1A17}'
+      + '#cz-challenge .czx-btn.p{background:#C2410C;color:#fff;border:0}#cz-challenge .czx-btn.p:hover{background:#9A3309}'
+      + '#cz-challenge .czx-btn.g{background:#3F7A3F;color:#fff;border:0}'
+      + '#cz-challenge .czx-btn:disabled{opacity:.45;cursor:not-allowed}'
+      + '#cz-challenge .czx-sample{font:500 12px/1 sans-serif;color:#6B6862;background:none;border:0;cursor:pointer;text-decoration:underline}'
+      + '#cz-challenge .czx-verdict{margin-top:14px;border:1px solid #D6D2C6;border-radius:11px;padding:13px 15px;background:#FBFAF7;display:none}'
+      + '#cz-challenge .czx-tag{display:inline-block;font:800 12px/1 sans-serif;letter-spacing:1px;padding:5px 10px;border-radius:6px}'
+      + '#cz-challenge .czx-tag.fake{background:#F6E0D8;color:#C2410C}#cz-challenge .czx-tag.real{background:#DFEBDF;color:#3F7A3F}'
+      + '#cz-challenge .czx-reason{font:400 13px/1.5 sans-serif;color:#3a382f;margin-top:9px}'
+      + '#cz-challenge .czx-teach{margin-top:12px;font:500 13px/1.4 sans-serif;color:#6B6862}'
+      + '#cz-challenge .czx-rule{margin-top:12px;border-left:3px solid #3F7A3F;background:#EFF3EF;border-radius:8px;padding:10px 12px;font:400 13px/1.5 sans-serif;color:#244024;display:none}'
+      + '#cz-challenge .czx-sub{margin-top:18px;padding-top:16px;border-top:1px dashed #D6D2C6}'
+      + '#cz-challenge .czx-hotelrow{display:flex;gap:8px;flex-wrap:wrap}'
+      + '#cz-challenge .czx-hotelrow input{flex:1;min-width:200px;border:1px solid #D6D2C6;border-radius:9px;padding:10px 13px;font:400 14px/1 sans-serif;background:#FBFAF7;color:#1A1A17}'
+      + '#cz-challenge .czx-rev{border:1px solid #D6D2C6;border-radius:9px;padding:10px 12px;background:#FBFAF7;margin-top:8px;font:400 12.5px/1.5 sans-serif;color:#3a382f}'
+      + '#cz-challenge .czx-rev .lab{font:800 10px/1 sans-serif;letter-spacing:1px;padding:3px 7px;border-radius:5px;margin-right:6px}'
+      + '#cz-challenge .czx-note{font:italic 12px/1.4 sans-serif;color:#9c9a8f;margin-top:8px}';
+    var st=document.createElement('style'); st.textContent=css; document.head.appendChild(st);
+
+    var SAMPLE = "Stayed at The Drake for our anniversary, room 1412 had a great view of Navy Pier, and the concierge Jose booked us a table at Lou Malnati's. AC rattled a bit at night though.";
+    var sec=document.createElement('section');
+    sec.className='sec band'; sec.id='cz-challenge'; sec.style.opacity='1'; sec.style.transform='none';
+    sec.innerHTML=
+      '<div class="wrap">'
+      + '<div class="sec-head" style="opacity:1;transform:none">'
+        + '<div class="eyebrow"><span class="n">&#9655;</span> YOUR TURN</div>'
+        + '<h2>Challenge the Detector &mdash; then teach it.</h2>'
+        + '<p class="lede">Write a review (or audit a real hotel\'s reviews from Google). If the Detector gets it wrong, tell it &mdash; the Reflector reads the Phoenix trace over MCP and writes a new rule on the spot. Then re-audit and watch it catch what just fooled it.</p>'
+      + '</div>'
+      + '<div class="figure" style="opacity:1;transform:none"><div class="czx-card">'
+        + '<textarea id="czxText" placeholder="Write a hotel review and try to fool the Detector..."></textarea>'
+        + '<div class="czx-row"><button class="czx-btn p" id="czxAudit">&#9655; Audit review</button>'
+          + '<button class="czx-sample" id="czxSample">try a tricky sample</button></div>'
+        + '<div class="czx-verdict" id="czxVerdict">'
+          + '<span class="czx-tag" id="czxTag">&mdash;</span>'
+          + '<div class="czx-reason" id="czxReason"></div>'
+          + '<div class="czx-teach" id="czxTeach">Was this right? '
+            + '<button class="czx-btn" id="czxAgree">&#10003; Correct</button> '
+            + '<button class="czx-btn" id="czxWrong">&#10007; Wrong</button></div>'
+          + '<div class="czx-rule" id="czxRule"></div>'
+        + '</div>'
+        + '<div class="czx-sub">'
+          + '<div class="czx-hotelrow"><input id="czxHotel" placeholder="...or audit a real hotel, e.g. The Drake, Chicago"/>'
+            + '<button class="czx-btn" id="czxHotelBtn">Fetch &amp; audit real reviews</button></div>'
+          + '<div id="czxHotelOut"></div>'
+        + '</div>'
+      + '</div></div>'
+      + '</div>';
+    afterEl.insertAdjacentElement('afterend', sec);
+    wireChallenge();
+  }
+
+  function wireChallenge(){
+    var T=document.getElementById('czxText'), auditB=document.getElementById('czxAudit'),
+        sampleB=document.getElementById('czxSample'), vBox=document.getElementById('czxVerdict'),
+        tag=document.getElementById('czxTag'), reason=document.getElementById('czxReason'),
+        teach=document.getElementById('czxTeach'), agreeB=document.getElementById('czxAgree'),
+        wrongB=document.getElementById('czxWrong'), ruleBox=document.getElementById('czxRule'),
+        hotel=document.getElementById('czxHotel'), hotelB=document.getElementById('czxHotelBtn'),
+        hotelOut=document.getElementById('czxHotelOut');
+    var lastText='', lastVerdict='';
+    function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+    function showVerdict(v,r){
+      lastVerdict=v;
+      tag.className='czx-tag '+v; tag.textContent=v.toUpperCase();
+      reason.textContent=r; ruleBox.style.display='none';
+      teach.style.display='block'; vBox.style.display='block';
+    }
+    function audit(cb){
+      var txt=T.value.trim(); if(!txt) return;
+      lastText=txt; auditB.disabled=true; auditB.textContent='Auditing…';
+      fetch('/api/audit_one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
+        .then(function(r){return r.json();}).then(function(d){
+          auditB.disabled=false; auditB.innerHTML='&#9655; Audit review';
+          if(d.ok){ showVerdict(d.verdict,d.reasoning); if(cb)cb(d); }
+        }).catch(function(){ auditB.disabled=false; auditB.innerHTML='&#9655; Audit review'; });
+    }
+    auditB.addEventListener('click',function(){ audit(); });
+    sampleB.addEventListener('click',function(){ T.value="Stayed at The Drake for our anniversary, room 1412 had a great view of Navy Pier, and the concierge Jose booked us a table at Lou Malnati's. AC rattled a bit at night though."; });
+    agreeB.addEventListener('click',function(){ teach.innerHTML='Nice &mdash; the Detector agreed with you. Try one that fools it.'; });
+    wrongB.addEventListener('click',function(){
+      var truth = (lastVerdict==='fake')?'real':'fake';
+      ruleBox.style.display='block';
+      ruleBox.innerHTML='<b>Reflector</b> is reading the Phoenix trace over MCP and writing a rule…';
+      fetch('/api/teach',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text:lastText,wrong_verdict:lastVerdict,true_label:truth})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d.ok && d.rule){
+            ruleBox.innerHTML='&#129504; <b>New rule learned from your correction:</b><br>'+esc(d.rule)
+              +'<br><br><button class="czx-btn g" id="czxRe">&#8635; Re-audit this review</button>';
+            var re=document.getElementById('czxRe');
+            if(re) re.addEventListener('click',function(){ audit(); });
+          } else { ruleBox.innerHTML='Reflector error: '+esc(d.error||'no rule'); }
+        }).catch(function(e){ ruleBox.innerHTML='Reflector error.'; });
+    });
+    hotelB.addEventListener('click',function(){
+      var q=hotel.value.trim(); if(!q) return;
+      hotelB.disabled=true; hotelB.textContent='Fetching…';
+      hotelOut.innerHTML='<div class="czx-note">Pulling real reviews from Google Places…</div>';
+      fetch('/api/places_reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})})
+        .then(function(r){return r.json();}).then(function(d){
+          hotelB.disabled=false; hotelB.textContent='Fetch & audit real reviews';
+          if(!d.ok){ hotelOut.innerHTML='<div class="czx-note">'+esc(d.error||'error')+'</div>'; return; }
+          var html='<div class="czx-note">Real reviews for <b>'+esc(d.hotel)+'</b>, audited live:</div>';
+          (d.reviews||[]).forEach(function(rv){
+            var cls=rv.verdict==='fake'?'fake':'real';
+            html+='<div class="czx-rev"><span class="lab czx-tag '+cls+'">'+rv.verdict.toUpperCase()+'</span>'
+              +'&#9733;'+esc(String(rv.rating))+' &middot; '+esc(rv.text.slice(0,220))+'…'
+              +'<div style="color:#6B6862;margin-top:5px">'+esc(rv.reasoning)+'</div></div>';
+          });
+          hotelOut.innerHTML=html;
+        }).catch(function(){ hotelB.disabled=false; hotelB.textContent='Fetch & audit real reviews'; hotelOut.innerHTML='<div class="czx-note">Request failed.</div>'; });
+    });
+  }
+
   /* ----------------------- live pipeline widget ----------------------- */
   function inject(){
     var demo=document.getElementById('demo');
@@ -295,6 +417,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       + '</div></div>'
       + '</div>';
     demo.insertAdjacentElement('afterend', sec);
+    try{ injectChallenge(sec); }catch(e){}
     czDrawResult(window.__czSeries);
     wire();
     return true;

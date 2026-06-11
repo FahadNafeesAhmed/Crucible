@@ -8,7 +8,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from crucible.agent.detector import DetectorAgent
 from crucible.obs.mcp_client import PhoenixMCPClient
-from crucible.loop.eval import run_eval_loop_stream
+from crucible.loop.eval import run_eval_loop_stream, reflect_via_adk, append_blindspot
+from pydantic import BaseModel
 import threading
 import json
 import asyncio
@@ -153,6 +154,121 @@ def api_fakes():
 @app.get("/api/rules")
 def api_rules():
     return state.rules
+
+
+# ---------------------------------------------------------------------------
+# Interactive "Challenge the Detector" — human-in-the-loop auditing.
+# A single persistent Detector so rules a judge teaches stick across calls.
+# ---------------------------------------------------------------------------
+_interactive = {"detector": None}
+
+
+def _get_interactive_detector():
+    if _interactive["detector"] is None:
+        _interactive["detector"] = DetectorAgent(mcp_client=PhoenixMCPClient())
+    return _interactive["detector"]
+
+
+def _audit_text(text, rating=5.0, reviewer="guest"):
+    """Run the persistent Detector on one review; returns verdict + reasoning."""
+    detector = _get_interactive_detector()
+    tup = (90000, "interactive", text, float(rating), "2024-01-01", reviewer, 1)
+    verdicts = detector.analyze_reviews([tup])
+    v = verdicts[0] if verdicts else {"verdict": "real", "reasoning": "no result"}
+    return {"verdict": v["verdict"], "reasoning": v.get("reasoning", "")}
+
+
+class AuditOneReq(BaseModel):
+    text: str
+    rating: float = 5.0
+
+
+@app.post("/api/audit_one")
+def api_audit_one(req: AuditOneReq):
+    """Judge submits one review; the Detector judges it (traced to Phoenix)."""
+    if not req.text.strip():
+        return {"ok": False, "error": "empty review"}
+    result = _audit_text(req.text, req.rating)
+    return {"ok": True, **result}
+
+
+class TeachReq(BaseModel):
+    text: str
+    wrong_verdict: str   # what the Detector said
+    true_label: str      # what the judge says is correct: "real" or "fake"
+
+
+@app.post("/api/teach")
+def api_teach(req: TeachReq):
+    """Judge corrects a verdict -> Reflector (ADK + Phoenix MCP) writes a new rule."""
+    detector = _get_interactive_detector()
+    failure = {"text": req.text, "true_label": req.true_label, "guessed_label": req.wrong_verdict,
+               "reasoning": "Judge correction"}
+    if req.true_label == "fake":   # detector said real -> false negative
+        failures = {"false_positives": [], "false_negatives": [failure]}
+    else:                          # detector said fake -> false positive
+        failures = {"false_positives": [failure], "false_negatives": []}
+    try:
+        rule_text = reflect_via_adk(failed_reviews=failures, current_rules=detector.blindspots)
+    except Exception as e:
+        return {"ok": False, "error": f"Reflector error: {e}"}
+    added = append_blindspot(detector, rule_text) if rule_text else False
+    from crucible.loop.eval import _clean_rule
+    return {"ok": True, "rule": _clean_rule(rule_text) if rule_text else "",
+            "added": added, "all_rules": detector.blindspots}
+
+
+@app.get("/api/interactive_rules")
+def api_interactive_rules():
+    d = _get_interactive_detector()
+    rules = [] if d.blindspots == "None" else [r for r in d.blindspots.split("\n") if r.strip()]
+    return {"rules": rules}
+
+
+class PlacesReq(BaseModel):
+    query: str
+
+
+@app.post("/api/places_reviews")
+def api_places_reviews(req: PlacesReq):
+    """Fetch real reviews for a hotel via Google Places API, then audit each."""
+    import requests
+    api_key = os.environ.get("PLACES_API_KEY") or os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    if not api_key:
+        return {"ok": False, "error": "PLACES_API_KEY not configured on the server."}
+    try:
+        resp = requests.post(
+            "https://places.googleapis.com/v1/places:searchText",
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": api_key,
+                "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.reviews",
+            },
+            json={"textQuery": req.query, "maxResultCount": 1},
+            timeout=15,
+        )
+        data = resp.json()
+        if resp.status_code != 200:
+            return {"ok": False, "error": data.get("error", {}).get("message", "Places API error")}
+        places = data.get("places", [])
+        if not places:
+            return {"ok": False, "error": f"No hotel found for '{req.query}'."}
+        place = places[0]
+        name = place.get("displayName", {}).get("text", req.query)
+        reviews = place.get("reviews", []) or []
+        audited = []
+        for rv in reviews[:5]:
+            text = (rv.get("text", {}) or {}).get("text", "") or (rv.get("originalText", {}) or {}).get("text", "")
+            if not text.strip():
+                continue
+            rating = rv.get("rating", 5)
+            author = (rv.get("authorAttribution", {}) or {}).get("displayName", "guest")
+            res = _audit_text(text, rating, author)
+            audited.append({"text": text, "rating": rating, "author": author,
+                            "verdict": res["verdict"], "reasoning": res["reasoning"]})
+        return {"ok": True, "hotel": name, "reviews": audited}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.get("/api/stream")
 async def api_stream(request: Request):
