@@ -41,7 +41,24 @@ class DetectorAgent:
                 logger.info(f"[Detector] Accumulated blindspots via MCP:\n{self.blindspots}")
 
     def get_system_prompt(self):
-        return DETECTOR_SYSTEM_PROMPT.format(blindspots=self.blindspots)
+        # The agent's "memory" lives in an Arize Phoenix Dataset (`crucible-rules`).
+        # We merge the Phoenix-persisted rules with any session-local ones so the
+        # Detector always reasons with the platform's current state of knowledge.
+        try:
+            from crucible.obs.phoenix_rules import render_blindspots as _phx_render
+            phx = _phx_render()
+        except Exception:
+            phx = "None"
+        local = self.blindspots
+        if local == "None" and phx == "None":
+            merged = "None"
+        elif local == "None":
+            merged = phx
+        elif phx == "None":
+            merged = local
+        else:
+            merged = phx + "\n" + local
+        return DETECTOR_SYSTEM_PROMPT.format(blindspots=merged)
 
     def _call_llm(self, prompt: str) -> str:
         """Call the LLM backend (Gemini or Ollama)."""

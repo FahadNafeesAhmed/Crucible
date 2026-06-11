@@ -325,11 +325,11 @@ document.addEventListener('DOMContentLoaded', async function() {
             + '</div>'
           + '</div>'
           + '<div class="czx-intel">'
-            + '<h4>&#129504; Detector Intelligence</h4>'
+            + '<h4>&#129504; Detector Intelligence</h4>'+ '<div style="font:600 10px/1.3 sans-serif;color:#7d877d;margin:-6px 0 12px;padding:5px 8px;border:1px solid #2a3a2a;border-radius:5px;background:#0e1612">&#9679; Memory lives in <b style="color:#9fcf9f">Arize Phoenix Dataset</b> &middot; <code style="color:#cfe6cf">crucible-rules</code></div>'
             + '<div class="czx-stat"><b id="czIntelRefl">0</b><span>Phoenix reflection cycles<br>(traces read via Arize MCP)</span></div>'
             + '<div class="czx-stat"><b id="czIntelRules">0</b><span>detection rules learned</span></div>'
             + '<div class="czx-stat"><b id="czIntelQuar">0</b><span>reviews quarantined</span></div>'
-            + '<div class="lbl">Rules distilled from traces</div>'
+            + '<div class="lbl">Rules in the Phoenix Dataset (live)</div>'
             + '<div id="czIntelList"><div class="czx-empty">No rules yet. Correct a verdict below to teach it.</div></div>'
           + '</div>'
         + '</div>'
@@ -351,11 +351,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
     function refreshIntel(){
-      fetch('/api/intelligence').then(function(r){return r.json();}).then(function(d){
+      Promise.all([fetch('/api/intelligence').then(function(r){return r.json();}),fetch('/api/phoenix_rules').then(function(r){return r.json();}).catch(function(){return {rules:[]};})]).then(function(arr){ var d=arr[0]; var px=arr[1]||{rules:[]};
         intelRefl.textContent=d.reflections||0;
         intelRules.textContent=(d.rules||[]).length;
         intelQuar.textContent=d.quarantined||0;
-        if((d.rules||[]).length){
+        var pxrules=(px.rules||[]);
+        if(pxrules.length){
+          intelList.innerHTML=pxrules.map(function(r){
+            var src=r.source==='seed'?'seed example (in Phoenix Dataset)':r.source==='judge_correction'?'judge correction &rarr; written to Phoenix':'Reflector &rarr; Phoenix Dataset';
+            return '<div class="czx-rule">'+esc(r.rule)+'<span class="src">&#128190; '+src+'</span></div>';
+          }).join('');
+          intelRules.textContent=pxrules.length;
+        } else if((d.rules||[]).length){
           intelList.innerHTML=d.rules.map(function(r){
             return '<div class="czx-rule">'+esc(r.replace(/^\d+\.\s*/,''))+'<span class="src">&#129504; distilled from Phoenix traces via MCP</span></div>';
           }).join('');

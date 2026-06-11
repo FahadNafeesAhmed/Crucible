@@ -219,11 +219,20 @@ def api_teach(req: TeachReq):
         return {"ok": False, "error": f"Reflector error: {e}"}
     # Each teach = one Reflector cycle that read this project's Phoenix traces over MCP.
     _interactive["reflections"] += 1
-    added = append_blindspot(detector, rule_text) if rule_text else False
     from crucible.loop.eval import _clean_rule
-    return {"ok": True, "rule": _clean_rule(rule_text) if rule_text else "",
-            "added": added, "reflections": _interactive["reflections"],
-            "rules": _rules_list()}
+    added = False
+    persisted = False
+    cleaned = _clean_rule(rule_text) if rule_text else ""
+    if cleaned:
+        added = append_blindspot(detector, rule_text)
+        # PERSIST to Arize Phoenix Dataset — the agent's memory lives on the partner platform.
+        try:
+            from crucible.obs.phoenix_rules import add_rule as _phx_add
+            persisted = _phx_add(cleaned, failure_text=req.text, source="judge_correction")
+        except Exception:
+            persisted = False
+    return {"ok": True, "rule": cleaned, "added": added, "persisted_to_phoenix": persisted,
+            "reflections": _interactive["reflections"], "rules": _rules_list()}
 
 
 @app.get("/api/interactive_rules")
@@ -234,8 +243,30 @@ def api_interactive_rules():
 @app.get("/api/intelligence")
 def api_intelligence():
     """Powers the 'Detector Intelligence' panel: how Phoenix traces made it smarter."""
-    return {"reflections": _interactive["reflections"], "rules": _rules_list(),
+    # Pull the rules straight from the Arize Phoenix Dataset — the agent's brain
+    # lives on the platform, not in our process.
+    phoenix_rules = []
+    try:
+        from crucible.obs.phoenix_rules import list_rules
+        phoenix_rules = list_rules(refresh=True)
+    except Exception:
+        pass
+    return {"reflections": _interactive["reflections"],
+            "rules": _rules_list(),
+            "phoenix_rules": phoenix_rules,
+            "phoenix_dataset": os.environ.get("CRUCIBLE_RULES_DATASET", "crucible-rules"),
             "quarantined": len(_interactive["quarantine"])}
+
+
+@app.get("/api/phoenix_rules")
+def api_phoenix_rules():
+    """Live rules read from the Arize Phoenix Dataset (the agent's memory)."""
+    try:
+        from crucible.obs.phoenix_rules import list_rules
+        return {"ok": True, "rules": list_rules(refresh=True),
+                "dataset": os.environ.get("CRUCIBLE_RULES_DATASET", "crucible-rules")}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "rules": []}
 
 
 class QuarantineReq(BaseModel):
