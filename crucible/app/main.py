@@ -160,13 +160,18 @@ def api_rules():
 # Interactive "Challenge the Detector" — human-in-the-loop auditing.
 # A single persistent Detector so rules a judge teaches stick across calls.
 # ---------------------------------------------------------------------------
-_interactive = {"detector": None}
+_interactive = {"detector": None, "reflections": 0, "quarantine": []}
 
 
 def _get_interactive_detector():
     if _interactive["detector"] is None:
         _interactive["detector"] = DetectorAgent(mcp_client=PhoenixMCPClient())
     return _interactive["detector"]
+
+
+def _rules_list():
+    d = _get_interactive_detector()
+    return [] if d.blindspots == "None" else [r for r in d.blindspots.split("\n") if r.strip()]
 
 
 def _audit_text(text, rating=5.0, reviewer="guest"):
@@ -212,17 +217,64 @@ def api_teach(req: TeachReq):
         rule_text = reflect_via_adk(failed_reviews=failures, current_rules=detector.blindspots)
     except Exception as e:
         return {"ok": False, "error": f"Reflector error: {e}"}
+    # Each teach = one Reflector cycle that read this project's Phoenix traces over MCP.
+    _interactive["reflections"] += 1
     added = append_blindspot(detector, rule_text) if rule_text else False
     from crucible.loop.eval import _clean_rule
     return {"ok": True, "rule": _clean_rule(rule_text) if rule_text else "",
-            "added": added, "all_rules": detector.blindspots}
+            "added": added, "reflections": _interactive["reflections"],
+            "rules": _rules_list()}
 
 
 @app.get("/api/interactive_rules")
 def api_interactive_rules():
-    d = _get_interactive_detector()
-    rules = [] if d.blindspots == "None" else [r for r in d.blindspots.split("\n") if r.strip()]
-    return {"rules": rules}
+    return {"rules": _rules_list()}
+
+
+@app.get("/api/intelligence")
+def api_intelligence():
+    """Powers the 'Detector Intelligence' panel: how Phoenix traces made it smarter."""
+    return {"reflections": _interactive["reflections"], "rules": _rules_list(),
+            "quarantined": len(_interactive["quarantine"])}
+
+
+class QuarantineReq(BaseModel):
+    items: list = []           # [{text, reasoning, hotel}]
+    hotel: str = ""
+
+
+@app.post("/api/quarantine")
+def api_quarantine(req: QuarantineReq):
+    """The agent's ACTION: quarantine the flagged reviews (human-approved).
+    Optionally escalate to a Slack/Discord webhook if WEBHOOK_URL is set."""
+    import datetime
+    added = []
+    for it in req.items:
+        entry = {"text": it.get("text", ""), "reasoning": it.get("reasoning", ""),
+                 "hotel": req.hotel or it.get("hotel", ""),
+                 "ts": datetime.datetime.utcnow().isoformat()}
+        _interactive["quarantine"].append(entry)
+        added.append(entry)
+
+    escalated = False
+    webhook = os.environ.get("WEBHOOK_URL", "")
+    if webhook and added:
+        try:
+            import requests
+            lines = "\n".join(f"• {e['text'][:140]}" for e in added)
+            msg = f"⚠️ Crucible flagged {len(added)} suspected fake review(s) for **{req.hotel}** and quarantined them for review:\n{lines}"
+            # works for both Slack ({"text":...}) and Discord ({"content":...})
+            requests.post(webhook, json={"text": msg, "content": msg}, timeout=8)
+            escalated = True
+        except Exception:
+            escalated = False
+    return {"ok": True, "quarantined": len(added), "total_quarantined": len(_interactive["quarantine"]),
+            "escalated": escalated}
+
+
+@app.get("/api/moderation_queue")
+def api_moderation_queue():
+    return {"queue": _interactive["quarantine"]}
 
 
 class PlacesReq(BaseModel):
@@ -257,16 +309,20 @@ def api_places_reviews(req: PlacesReq):
         name = place.get("displayName", {}).get("text", req.query)
         reviews = place.get("reviews", []) or []
         audited = []
-        for rv in reviews[:5]:
+        for idx, rv in enumerate(reviews[:5]):
             text = (rv.get("text", {}) or {}).get("text", "") or (rv.get("originalText", {}) or {}).get("text", "")
             if not text.strip():
                 continue
             rating = rv.get("rating", 5)
             author = (rv.get("authorAttribution", {}) or {}).get("displayName", "guest")
             res = _audit_text(text, rating, author)
-            audited.append({"text": text, "rating": rating, "author": author,
+            audited.append({"id": idx, "text": text, "rating": rating, "author": author,
                             "verdict": res["verdict"], "reasoning": res["reasoning"]})
-        return {"ok": True, "hotel": name, "reviews": audited}
+        fake_n = sum(1 for r in audited if r["verdict"] == "fake")
+        total = len(audited)
+        summary = {"total": total, "fake": fake_n, "real": total - fake_n,
+                   "suspicious_pct": round(100 * fake_n / total) if total else 0}
+        return {"ok": True, "hotel": name, "reviews": audited, "summary": summary}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

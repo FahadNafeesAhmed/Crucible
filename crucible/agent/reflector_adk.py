@@ -31,11 +31,13 @@ details* (named theaters, restaurants, room numbers, minor complaints about AC o
 for the trip). The Detector wrongly treats "specific detail" as proof of authenticity. Your rules
 must break that assumption.
 
-Follow these steps exactly:
-1. Call the `list-traces` tool for the project `crucible`.
-2. For the failed evaluations, call `get-trace-details` to read the exact fake text and the
-   Detector's reasoning.
-3. Identify the CONCRETE textual signal the fakes share that the Detector missed.
+Follow these steps:
+1. Call the `list-traces` tool for the project `crucible` to inspect recent evaluation traces.
+   (You may also use `get-spans` for span-level detail.) Use ONLY tools that actually exist;
+   if a tool call returns an error, DO NOT stop or report the error — simply continue.
+2. The exact review(s) that just fooled the Detector are provided in the user message below; rely
+   on them as the primary evidence (the traces are supporting context).
+3. Identify the CONCRETE textual signal the fake(s) share that the Detector missed.
 4. Write exactly ONE new rule that is:
    - CONCRETE and TESTABLE: name the specific signal to check (e.g. "treat brand-name landmark +
      generic complaint combos as suspicious unless the detail is internally verifiable"), NOT vague
@@ -44,6 +46,9 @@ Follow these steps exactly:
    - DIFFERENT from any rule already in the current rule set (do not restate or rephrase).
    - A counter to the specificity trick: remind the Detector that fabricated specifics are cheap,
      so it should weigh internal consistency, plausibility, and verifiability over mere detail.
+
+CRITICAL: You MUST ALWAYS finish by outputting a rule, even if every tool call failed — derive it
+from the failing review(s) in the user message. Never output an error message or apology.
 
 OUTPUT FORMAT: Output ONLY the rule as a single plain sentence. No preamble, no numbering, no
 quotes, no reasoning. Start with an imperative verb.

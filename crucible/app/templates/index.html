@@ -255,58 +255,83 @@ document.addEventListener('DOMContentLoaded', async function() {
     mount.innerHTML=czDraw(series, !!(series&&series.length));
   }
 
-  /* ---------------- Challenge the Detector (human-in-the-loop) ---------------- */
+  /* ---------------- Audit a real hotel + teach loop (CENTERPIECE) ---------------- */
   function injectChallenge(afterEl){
     if(document.getElementById('cz-challenge')) return;
     var css = ''
       + '#cz-challenge .czx-card{background:#F4F2EC;border:1px solid #D6D2C6;border-radius:14px;padding:18px;color:#1A1A17}'
-      + '#cz-challenge textarea{width:100%;min-height:84px;border:1px solid #D6D2C6;border-radius:10px;padding:11px 13px;font:400 14px/1.5 -apple-system,sans-serif;background:#FBFAF7;color:#1A1A17;resize:vertical;box-sizing:border-box}'
-      + '#cz-challenge .czx-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}'
-      + '#cz-challenge .czx-btn{font:600 13px/1 sans-serif;border-radius:9px;padding:10px 16px;cursor:pointer;border:1px solid #D6D2C6;background:#FBFAF7;color:#1A1A17}'
-      + '#cz-challenge .czx-btn.p{background:#C2410C;color:#fff;border:0}#cz-challenge .czx-btn.p:hover{background:#9A3309}'
-      + '#cz-challenge .czx-btn.g{background:#3F7A3F;color:#fff;border:0}'
-      + '#cz-challenge .czx-btn:disabled{opacity:.45;cursor:not-allowed}'
-      + '#cz-challenge .czx-sample{font:500 12px/1 sans-serif;color:#6B6862;background:none;border:0;cursor:pointer;text-decoration:underline}'
-      + '#cz-challenge .czx-verdict{margin-top:14px;border:1px solid #D6D2C6;border-radius:11px;padding:13px 15px;background:#FBFAF7;display:none}'
-      + '#cz-challenge .czx-tag{display:inline-block;font:800 12px/1 sans-serif;letter-spacing:1px;padding:5px 10px;border-radius:6px}'
-      + '#cz-challenge .czx-tag.fake{background:#F6E0D8;color:#C2410C}#cz-challenge .czx-tag.real{background:#DFEBDF;color:#3F7A3F}'
-      + '#cz-challenge .czx-reason{font:400 13px/1.5 sans-serif;color:#3a382f;margin-top:9px}'
-      + '#cz-challenge .czx-teach{margin-top:12px;font:500 13px/1.4 sans-serif;color:#6B6862}'
-      + '#cz-challenge .czx-rule{margin-top:12px;border-left:3px solid #3F7A3F;background:#EFF3EF;border-radius:8px;padding:10px 12px;font:400 13px/1.5 sans-serif;color:#244024;display:none}'
-      + '#cz-challenge .czx-sub{margin-top:18px;padding-top:16px;border-top:1px dashed #D6D2C6}'
       + '#cz-challenge .czx-hotelrow{display:flex;gap:8px;flex-wrap:wrap}'
-      + '#cz-challenge .czx-hotelrow input{flex:1;min-width:200px;border:1px solid #D6D2C6;border-radius:9px;padding:10px 13px;font:400 14px/1 sans-serif;background:#FBFAF7;color:#1A1A17}'
-      + '#cz-challenge .czx-rev{border:1px solid #D6D2C6;border-radius:9px;padding:10px 12px;background:#FBFAF7;margin-top:8px;font:400 12.5px/1.5 sans-serif;color:#3a382f}'
-      + '#cz-challenge .czx-rev .lab{font:800 10px/1 sans-serif;letter-spacing:1px;padding:3px 7px;border-radius:5px;margin-right:6px}'
-      + '#cz-challenge .czx-note{font:italic 12px/1.4 sans-serif;color:#9c9a8f;margin-top:8px}';
+      + '#cz-challenge .czx-hotelrow input{flex:1;min-width:220px;border:1px solid #D6D2C6;border-radius:10px;padding:12px 14px;font:400 15px/1 sans-serif;background:#FBFAF7;color:#1A1A17}'
+      + '#cz-challenge .czx-btn{font:600 13px/1 sans-serif;border-radius:9px;padding:11px 16px;cursor:pointer;border:1px solid #D6D2C6;background:#FBFAF7;color:#1A1A17}'
+      + '#cz-challenge .czx-btn.p{background:#C2410C;color:#fff;border:0}#cz-challenge .czx-btn.p:hover{background:#9A3309}'
+      + '#cz-challenge .czx-btn.g{background:#3F7A3F;color:#fff;border:0}#cz-challenge .czx-btn.g:hover{background:#2f5d2f}'
+      + '#cz-challenge .czx-btn:disabled{opacity:.45;cursor:not-allowed}'
+      + '#cz-challenge .czx-chip{font:500 12px/1 sans-serif;color:#6B6862;background:none;border:0;cursor:pointer;text-decoration:underline;padding:0}'
+      + '#cz-challenge .czx-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-top:16px}'
+      + '#cz-challenge .czx-summary{border:1px solid #D6D2C6;border-radius:11px;padding:13px 15px;background:#FBFAF7;margin-bottom:12px;display:none}'
+      + '#cz-challenge .czx-score{font:800 30px/1 sans-serif;color:#C2410C}'
+      + '#cz-challenge .czx-score.clean{color:#3F7A3F}'
+      + '#cz-challenge .czx-summary .sub{font:500 12px/1.4 sans-serif;color:#6B6862;margin-top:4px}'
+      + '#cz-challenge .czx-rev{border:1px solid #D6D2C6;border-radius:10px;padding:11px 13px;background:#FBFAF7;margin-bottom:9px;transition:.25s}'
+      + '#cz-challenge .czx-rev.flagged{border-left:3px solid #C2410C}#cz-challenge .czx-rev.clean{border-left:3px solid #3F7A3F}'
+      + '#cz-challenge .czx-rev.quar{opacity:.5;background:#EEE9E0}'
+      + '#cz-challenge .czx-rev.flip{animation:czflip 1.1s ease}'
+      + '@keyframes czflip{0%{background:#FFF4D6}100%{background:#FBFAF7}}'
+      + '#cz-challenge .czx-tag{display:inline-block;font:800 11px/1 sans-serif;letter-spacing:1px;padding:4px 9px;border-radius:6px;vertical-align:middle}'
+      + '#cz-challenge .czx-tag.fake{background:#F6E0D8;color:#C2410C}#cz-challenge .czx-tag.real{background:#DFEBDF;color:#3F7A3F}'
+      + '#cz-challenge .czx-revtext{font:400 13px/1.5 sans-serif;color:#2c2a24;margin-top:7px}'
+      + '#cz-challenge .czx-why{font:400 12px/1.45 sans-serif;color:#6B6862;margin-top:6px}'
+      + '#cz-challenge .czx-revact{margin-top:8px}'
+      + '#cz-challenge .czx-flipbadge{font:700 11px/1 sans-serif;color:#3F7A3F;margin-left:8px}'
+      + '#cz-challenge .czx-intel{border:1px solid #2a3a2a;border-radius:11px;padding:15px;background:#16201a;color:#E9E6DD;align-self:start;position:sticky;top:70px}'
+      + '#cz-challenge .czx-intel h4{font:800 11px/1 sans-serif;letter-spacing:1.2px;text-transform:uppercase;color:#9fcf9f;margin:0 0 12px}'
+      + '#cz-challenge .czx-stat{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}'
+      + '#cz-challenge .czx-stat b{font:800 26px/1 sans-serif;color:#fff}#cz-challenge .czx-stat span{font:500 12px/1.3 sans-serif;color:#9aa39a}'
+      + '#cz-challenge .czx-intel .lbl{font:700 10px/1 sans-serif;letter-spacing:1px;text-transform:uppercase;color:#8FBF8F;margin:14px 0 8px}'
+      + '#cz-challenge .czx-rule{border-left:2px solid #3F7A3F;background:#1d2a20;border-radius:6px;padding:8px 10px;font:400 12px/1.45 sans-serif;color:#cfe6cf;margin-bottom:7px}'
+      + '#cz-challenge .czx-rule .src{display:block;font:600 9px/1 sans-serif;letter-spacing:.5px;text-transform:uppercase;color:#6f9f6f;margin-top:5px}'
+      + '#cz-challenge .czx-empty{font:italic 12px/1.4 sans-serif;color:#7d877d}'
+      + '#cz-challenge .czx-note{font:italic 12px/1.4 sans-serif;color:#9c9a8f;margin-top:8px}'
+      + '#cz-challenge .czx-teachflow{font:500 12px/1.5 sans-serif;color:#3F7A3F;margin-top:7px;display:none}'
+      + '#cz-challenge .czx-own{margin-top:16px;padding-top:14px;border-top:1px dashed #D6D2C6}'
+      + '#cz-challenge .czx-own textarea{width:100%;min-height:64px;border:1px solid #D6D2C6;border-radius:10px;padding:10px 12px;font:400 13px/1.5 sans-serif;background:#FBFAF7;color:#1A1A17;box-sizing:border-box}'
+      + '@media(max-width:760px){#cz-challenge .czx-grid{grid-template-columns:1fr}#cz-challenge .czx-intel{position:static}}';
     var st=document.createElement('style'); st.textContent=css; document.head.appendChild(st);
 
-    var SAMPLE = "Stayed at The Drake for our anniversary, room 1412 had a great view of Navy Pier, and the concierge Jose booked us a table at Lou Malnati's. AC rattled a bit at night though.";
     var sec=document.createElement('section');
     sec.className='sec band'; sec.id='cz-challenge'; sec.style.opacity='1'; sec.style.transform='none';
     sec.innerHTML=
       '<div class="wrap">'
       + '<div class="sec-head" style="opacity:1;transform:none">'
-        + '<div class="eyebrow"><span class="n">&#9655;</span> YOUR TURN</div>'
-        + '<h2>Challenge the Detector &mdash; then teach it.</h2>'
-        + '<p class="lede">Write a review (or audit a real hotel\'s reviews from Google). If the Detector gets it wrong, tell it &mdash; the Reflector reads the Phoenix trace over MCP and writes a new rule on the spot. Then re-audit and watch it catch what just fooled it.</p>'
+        + '<div class="eyebrow"><span class="n">&#9655;</span> LIVE AUDIT</div>'
+        + '<h2>Audit a real hotel&rsquo;s reviews &mdash; and watch it learn.</h2>'
+        + '<p class="lede">Pull live reviews from Google, run them through the multi-agent system, and act on the verdicts. Disagree with a call? The Reflector reads the Phoenix traces over MCP and rewrites its rules &mdash; the <b>Detector Intelligence</b> panel shows it getting smarter in real time. Every step is traced in Arize Phoenix.</p>'
       + '</div>'
       + '<div class="figure" style="opacity:1;transform:none"><div class="czx-card">'
-        + '<textarea id="czxText" placeholder="Write a hotel review and try to fool the Detector..."></textarea>'
-        + '<div class="czx-row"><button class="czx-btn p" id="czxAudit">&#9655; Audit review</button>'
-          + '<button class="czx-sample" id="czxSample">try a tricky sample</button></div>'
-        + '<div class="czx-verdict" id="czxVerdict">'
-          + '<span class="czx-tag" id="czxTag">&mdash;</span>'
-          + '<div class="czx-reason" id="czxReason"></div>'
-          + '<div class="czx-teach" id="czxTeach">Was this right? '
-            + '<button class="czx-btn" id="czxAgree">&#10003; Correct</button> '
-            + '<button class="czx-btn" id="czxWrong">&#10007; Wrong</button></div>'
-          + '<div class="czx-rule" id="czxRule"></div>'
+        + '<div class="czx-hotelrow">'
+          + '<input id="czxHotel" placeholder="Enter a hotel, e.g. The Drake, Chicago"/>'
+          + '<button class="czx-btn p" id="czxHotelBtn">&#9655; Fetch &amp; audit real reviews</button>'
         + '</div>'
-        + '<div class="czx-sub">'
-          + '<div class="czx-hotelrow"><input id="czxHotel" placeholder="...or audit a real hotel, e.g. The Drake, Chicago"/>'
-            + '<button class="czx-btn" id="czxHotelBtn">Fetch &amp; audit real reviews</button></div>'
-          + '<div id="czxHotelOut"></div>'
+        + '<div style="margin-top:6px"><button class="czx-chip" id="czxSampleHotel">use &ldquo;The Drake, Chicago&rdquo;</button></div>'
+        + '<div class="czx-grid">'
+          + '<div>'
+            + '<div class="czx-summary" id="czxSummary"></div>'
+            + '<div id="czxHotelOut"></div>'
+            + '<div class="czx-own">'
+              + '<div style="font:700 11px/1 sans-serif;letter-spacing:1px;text-transform:uppercase;color:#6B6862;margin-bottom:8px">Or test your own review</div>'
+              + '<textarea id="czxText" placeholder="Write a review to test the Detector..."></textarea>'
+              + '<div style="margin-top:8px"><button class="czx-btn" id="czxAudit">Audit my review</button> '
+                + '<span id="czxOwnOut" style="font:500 13px/1.4 sans-serif;margin-left:8px"></span></div>'
+            + '</div>'
+          + '</div>'
+          + '<div class="czx-intel">'
+            + '<h4>&#129504; Detector Intelligence</h4>'
+            + '<div class="czx-stat"><b id="czIntelRefl">0</b><span>Phoenix reflection cycles<br>(traces read via Arize MCP)</span></div>'
+            + '<div class="czx-stat"><b id="czIntelRules">0</b><span>detection rules learned</span></div>'
+            + '<div class="czx-stat"><b id="czIntelQuar">0</b><span>reviews quarantined</span></div>'
+            + '<div class="lbl">Rules distilled from traces</div>'
+            + '<div id="czIntelList"><div class="czx-empty">No rules yet. Correct a verdict below to teach it.</div></div>'
+          + '</div>'
         + '</div>'
       + '</div></div>'
       + '</div>';
@@ -315,66 +340,152 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   function wireChallenge(){
-    var T=document.getElementById('czxText'), auditB=document.getElementById('czxAudit'),
-        sampleB=document.getElementById('czxSample'), vBox=document.getElementById('czxVerdict'),
-        tag=document.getElementById('czxTag'), reason=document.getElementById('czxReason'),
-        teach=document.getElementById('czxTeach'), agreeB=document.getElementById('czxAgree'),
-        wrongB=document.getElementById('czxWrong'), ruleBox=document.getElementById('czxRule'),
-        hotel=document.getElementById('czxHotel'), hotelB=document.getElementById('czxHotelBtn'),
-        hotelOut=document.getElementById('czxHotelOut');
-    var lastText='', lastVerdict='';
+    var hotel=document.getElementById('czxHotel'), hotelB=document.getElementById('czxHotelBtn'),
+        sampleH=document.getElementById('czxSampleHotel'), out=document.getElementById('czxHotelOut'),
+        summary=document.getElementById('czxSummary'),
+        intelRefl=document.getElementById('czIntelRefl'), intelRules=document.getElementById('czIntelRules'),
+        intelQuar=document.getElementById('czIntelQuar'), intelList=document.getElementById('czIntelList'),
+        T=document.getElementById('czxText'), auditB=document.getElementById('czxAudit'),
+        ownOut=document.getElementById('czxOwnOut');
+    var lastHotel='', lastReviews=[];
     function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-    function showVerdict(v,r){
-      lastVerdict=v;
-      tag.className='czx-tag '+v; tag.textContent=v.toUpperCase();
-      reason.textContent=r; ruleBox.style.display='none';
-      teach.style.display='block'; vBox.style.display='block';
+
+    function refreshIntel(){
+      fetch('/api/intelligence').then(function(r){return r.json();}).then(function(d){
+        intelRefl.textContent=d.reflections||0;
+        intelRules.textContent=(d.rules||[]).length;
+        intelQuar.textContent=d.quarantined||0;
+        if((d.rules||[]).length){
+          intelList.innerHTML=d.rules.map(function(r){
+            return '<div class="czx-rule">'+esc(r.replace(/^\d+\.\s*/,''))+'<span class="src">&#129504; distilled from Phoenix traces via MCP</span></div>';
+          }).join('');
+        }
+      }).catch(function(){});
     }
-    function audit(cb){
-      var txt=T.value.trim(); if(!txt) return;
-      lastText=txt; auditB.disabled=true; auditB.textContent='Auditing…';
-      fetch('/api/audit_one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
-        .then(function(r){return r.json();}).then(function(d){
-          auditB.disabled=false; auditB.innerHTML='&#9655; Audit review';
-          if(d.ok){ showVerdict(d.verdict,d.reasoning); if(cb)cb(d); }
-        }).catch(function(){ auditB.disabled=false; auditB.innerHTML='&#9655; Audit review'; });
+
+    function renderReviews(){
+      out.innerHTML=lastReviews.map(function(rv){
+        var cls=rv.verdict==='fake'?'flagged':'clean';
+        var q=rv.quar?' quar':'';
+        var flip=rv._flip?' flip':'';
+        var badge=rv._flip?'<span class="czx-flipbadge">&#8635; re-judged after learning</span>':'';
+        return '<div class="czx-rev '+cls+q+flip+'" data-id="'+rv.id+'">'
+          + '<span class="czx-tag '+(rv.verdict==='fake'?'fake':'real')+'">'+rv.verdict.toUpperCase()+'</span> '
+          + '<span style="font:600 12px/1 sans-serif;color:#6B6862">&#9733;'+esc(String(rv.rating))+' &middot; '+esc(rv.author||'guest')+'</span>'+badge
+          + '<div class="czx-revtext">'+esc(rv.text.slice(0,240))+(rv.text.length>240?'…':'')+'</div>'
+          + '<div class="czx-why">'+esc(rv.reasoning)+'</div>'
+          + (rv.quar?'<div class="czx-note">Quarantined &mdash; removed from the live set.</div>'
+             : '<div class="czx-revact"><button class="czx-chip czxDisagree" data-id="'+rv.id+'">Disagree &mdash; it&rsquo;s actually '+(rv.verdict==='fake'?'real':'fake')+', teach the Detector &rarr;</button>'
+               + '<div class="czx-teachflow" id="czxFlow'+rv.id+'"></div></div>')
+          + '</div>';
+      }).join('');
+      // wire disagree buttons
+      Array.prototype.forEach.call(out.querySelectorAll('.czxDisagree'), function(b){
+        b.addEventListener('click', function(){ teachFromReview(parseInt(b.getAttribute('data-id'),10)); });
+      });
+      renderActionBar();
     }
-    auditB.addEventListener('click',function(){ audit(); });
-    sampleB.addEventListener('click',function(){ T.value="Stayed at The Drake for our anniversary, room 1412 had a great view of Navy Pier, and the concierge Jose booked us a table at Lou Malnati's. AC rattled a bit at night though."; });
-    agreeB.addEventListener('click',function(){ teach.innerHTML='Nice &mdash; the Detector agreed with you. Try one that fools it.'; });
-    wrongB.addEventListener('click',function(){
-      var truth = (lastVerdict==='fake')?'real':'fake';
-      ruleBox.style.display='block';
-      ruleBox.innerHTML='<b>Reflector</b> is reading the Phoenix trace over MCP and writing a rule…';
-      fetch('/api/teach',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({text:lastText,wrong_verdict:lastVerdict,true_label:truth})})
-        .then(function(r){return r.json();}).then(function(d){
-          if(d.ok && d.rule){
-            ruleBox.innerHTML='&#129504; <b>New rule learned from your correction:</b><br>'+esc(d.rule)
-              +'<br><br><button class="czx-btn g" id="czxRe">&#8635; Re-audit this review</button>';
-            var re=document.getElementById('czxRe');
-            if(re) re.addEventListener('click',function(){ audit(); });
-          } else { ruleBox.innerHTML='Reflector error: '+esc(d.error||'no rule'); }
-        }).catch(function(e){ ruleBox.innerHTML='Reflector error.'; });
-    });
-    hotelB.addEventListener('click',function(){
-      var q=hotel.value.trim(); if(!q) return;
-      hotelB.disabled=true; hotelB.textContent='Fetching…';
-      hotelOut.innerHTML='<div class="czx-note">Pulling real reviews from Google Places…</div>';
+
+    function renderActionBar(){
+      var flagged=lastReviews.filter(function(r){return r.verdict==='fake' && !r.quar;});
+      var bar=document.getElementById('czxActionBar');
+      if(bar) bar.remove();
+      if(!lastReviews.length) return;
+      var div=document.createElement('div'); div.id='czxActionBar'; div.style.marginTop='10px';
+      if(flagged.length){
+        div.innerHTML='<button class="czx-btn p" id="czxQuar">&#128737; Approve &amp; quarantine '+flagged.length+' flagged review'+(flagged.length>1?'s':'')+'</button>'
+          + ' <button class="czx-btn g" id="czxReaudit">&#8635; Re-audit hotel</button>'
+          + '<div id="czxQuarMsg" class="czx-note"></div>';
+      } else {
+        div.innerHTML='<button class="czx-btn g" id="czxReaudit">&#8635; Re-audit hotel</button>'
+          + '<div id="czxQuarMsg" class="czx-note">No reviews flagged &mdash; nothing to quarantine.</div>';
+      }
+      out.appendChild(div);
+      var qb=document.getElementById('czxQuar'); if(qb) qb.addEventListener('click', quarantine);
+      var rb=document.getElementById('czxReaudit'); if(rb) rb.addEventListener('click', function(){ if(lastHotel) fetchHotel(lastHotel, true); });
+    }
+
+    function fetchHotel(q, isReaudit){
+      lastHotel=q; hotelB.disabled=true; hotelB.innerHTML='Auditing…';
+      if(!isReaudit){ out.innerHTML='<div class="czx-note">Pulling real reviews from Google Places, then auditing each through the multi-agent system…</div>'; summary.style.display='none'; }
       fetch('/api/places_reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})})
         .then(function(r){return r.json();}).then(function(d){
-          hotelB.disabled=false; hotelB.textContent='Fetch & audit real reviews';
-          if(!d.ok){ hotelOut.innerHTML='<div class="czx-note">'+esc(d.error||'error')+'</div>'; return; }
-          var html='<div class="czx-note">Real reviews for <b>'+esc(d.hotel)+'</b>, audited live:</div>';
-          (d.reviews||[]).forEach(function(rv){
-            var cls=rv.verdict==='fake'?'fake':'real';
-            html+='<div class="czx-rev"><span class="lab czx-tag '+cls+'">'+rv.verdict.toUpperCase()+'</span>'
-              +'&#9733;'+esc(String(rv.rating))+' &middot; '+esc(rv.text.slice(0,220))+'…'
-              +'<div style="color:#6B6862;margin-top:5px">'+esc(rv.reasoning)+'</div></div>';
+          hotelB.disabled=false; hotelB.innerHTML='&#9655; Fetch & audit real reviews';
+          if(!d.ok){ out.innerHTML='<div class="czx-note">'+esc(d.error||'error')+'</div>'; return; }
+          var prev={}; lastReviews.forEach(function(r){prev[r.id]=r.verdict;});
+          lastReviews=(d.reviews||[]).map(function(r){
+            if(isReaudit && prev[r.id]!==undefined && prev[r.id]!==r.verdict) r._flip=true;
+            return r;
           });
-          hotelOut.innerHTML=html;
-        }).catch(function(){ hotelB.disabled=false; hotelB.textContent='Fetch & audit real reviews'; hotelOut.innerHTML='<div class="czx-note">Request failed.</div>'; });
-    });
+          var s=d.summary||{};
+          summary.style.display='block';
+          summary.innerHTML='<span class="czx-score'+(s.fake?'':' clean')+'">'+(s.suspicious_pct||0)+'%</span> '
+            + '<span style="font:700 14px/1 sans-serif"> of reviews flagged suspicious</span>'
+            + '<div class="sub">Audited '+(s.total||0)+' real reviews for <b>'+esc(d.hotel)+'</b> &mdash; '+(s.fake||0)+' likely fake, '+(s.real||0)+' authentic'
+            + (isReaudit?' &middot; re-audited with newly learned rules':'')+'</div>';
+          renderReviews();
+        }).catch(function(){ hotelB.disabled=false; hotelB.innerHTML='&#9655; Fetch & audit real reviews'; out.innerHTML='<div class="czx-note">Request failed.</div>'; });
+    }
+
+    function teachFromReview(id){
+      var rv=null; lastReviews.forEach(function(r){if(r.id===id)rv=r;});
+      if(!rv) return;
+      var flow=document.getElementById('czxFlow'+id);
+      var truth=(rv.verdict==='fake')?'real':'fake';
+      if(flow){ flow.style.display='block'; flow.innerHTML='&#129504; Reflector &rarr; querying Phoenix traces over MCP &rarr; writing a rule…'; }
+      fetch('/api/teach',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text:rv.text,wrong_verdict:rv.verdict,true_label:truth})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d.ok && d.rule){
+            if(flow) flow.innerHTML='&#10003; New rule learned from the Phoenix trace: <b>'+esc(d.rule)+'</b> &mdash; now click <b>Re-audit hotel</b>.';
+            refreshIntel();
+          } else if(flow){ flow.innerHTML='Reflector error: '+esc(d.error||'no rule'); }
+        }).catch(function(){ if(flow) flow.innerHTML='Reflector error.'; });
+    }
+
+    function quarantine(){
+      var flagged=lastReviews.filter(function(r){return r.verdict==='fake' && !r.quar;});
+      if(!flagged.length) return;
+      var qb=document.getElementById('czxQuar'); if(qb){ qb.disabled=true; qb.textContent='Quarantining…'; }
+      fetch('/api/quarantine',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({hotel:lastHotel, items:flagged.map(function(r){return {text:r.text,reasoning:r.reasoning};})})})
+        .then(function(r){return r.json();}).then(function(d){
+          flagged.forEach(function(r){r.quar=true;});
+          renderReviews();
+          var msg=document.getElementById('czxQuarMsg');
+          if(msg) msg.innerHTML='&#9989; Quarantined '+d.quarantined+' review(s) &mdash; removed from the live set'+(d.escalated?' and escalated to the trust &amp; safety channel.':'.');
+          refreshIntel();
+        }).catch(function(){ if(qb){qb.disabled=false;} });
+    }
+
+    // ---- own-review quick test ----
+    function auditOwn(){
+      var txt=T.value.trim(); if(!txt) return;
+      auditB.disabled=true; auditB.textContent='Auditing…'; ownOut.textContent='';
+      fetch('/api/audit_one',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
+        .then(function(r){return r.json();}).then(function(d){
+          auditB.disabled=false; auditB.textContent='Audit my review';
+          if(d.ok){
+            var truth=(d.verdict==='fake')?'real':'fake';
+            ownOut.innerHTML='<span class="czx-tag '+d.verdict+'">'+d.verdict.toUpperCase()+'</span> '+esc(d.reasoning)
+              +' <button class="czx-chip" id="czxOwnTeach">Disagree &rarr;</button>';
+            var ot=document.getElementById('czxOwnTeach');
+            if(ot) ot.addEventListener('click', function(){
+              ownOut.innerHTML+=' <span style="color:#3F7A3F">&#129504; teaching…</span>';
+              fetch('/api/teach',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({text:txt,wrong_verdict:d.verdict,true_label:truth})})
+                .then(function(r){return r.json();}).then(function(t){
+                  if(t.ok&&t.rule){ ownOut.innerHTML='<span style="color:#3F7A3F">&#10003; Learned: '+esc(t.rule)+'</span>'; refreshIntel(); }
+                });
+            });
+          }
+        }).catch(function(){ auditB.disabled=false; auditB.textContent='Audit my review'; });
+    }
+
+    hotelB.addEventListener('click', function(){ var q=hotel.value.trim(); if(q) fetchHotel(q, false); });
+    sampleH.addEventListener('click', function(){ hotel.value='The Drake, Chicago'; });
+    auditB.addEventListener('click', auditOwn);
+    refreshIntel();
   }
 
   /* ----------------------- live pipeline widget ----------------------- */
