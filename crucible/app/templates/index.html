@@ -319,6 +319,72 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   /* ---------------- Audit a real hotel + teach loop (CENTERPIECE) ---------------- */
+    /* methodology diagram SVG (6-step pipeline, brief palette) */
+  var CZX_METHOD_SVG = (
+    '<svg viewBox="0 0 980 320" width="100%" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:block;font-family:-apple-system,BlinkMacSystemFont,sans-serif">'
+    + '<defs>'
+      + '<marker id="czarr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
+        + '<path d="M0 0 L10 5 L0 10 Z" fill="#C2410C"/>'
+      + '</marker>'
+    + '</defs>'
+    // -- top row: 1 -> 2 -> 3 -> 4
+    + '<g font-size="12">'
+      // step 1
+      + '<rect x="20" y="40" width="180" height="84" rx="10" fill="#F4F2EC" stroke="#D6D2C6"/>'
+      + '<text x="32" y="62" font-weight="800" font-size="11" fill="#C2410C" letter-spacing="1.2">STEP 1</text>'
+      + '<text x="32" y="84" font-weight="700" fill="#1A1A17">Pull real reviews</text>'
+      + '<text x="32" y="102" fill="#6B6862">Google Places API</text>'
+      + '<text x="32" y="116" fill="#6B6862">&middot; up to 5 live reviews</text>'
+      // step 2
+      + '<rect x="240" y="40" width="180" height="84" rx="10" fill="#F4F2EC" stroke="#D6D2C6"/>'
+      + '<text x="252" y="62" font-weight="800" font-size="11" fill="#C2410C" letter-spacing="1.2">STEP 2</text>'
+      + '<text x="252" y="84" font-weight="700" fill="#1A1A17">Detector judges</text>'
+      + '<text x="252" y="102" fill="#6B6862">Gemini, structured JSON</text>'
+      + '<text x="252" y="116" fill="#6B6862">&middot; traced to Phoenix</text>'
+      // step 3
+      + '<rect x="460" y="40" width="180" height="84" rx="10" fill="#F4F2EC" stroke="#D6D2C6"/>'
+      + '<text x="472" y="62" font-weight="800" font-size="11" fill="#C2410C" letter-spacing="1.2">STEP 3</text>'
+      + '<text x="472" y="84" font-weight="700" fill="#1A1A17">Show verdicts</text>'
+      + '<text x="472" y="102" fill="#6B6862">aggregate score</text>'
+      + '<text x="472" y="116" fill="#6B6862">&middot; per-review reasoning</text>'
+      // step 4 (the action)
+      + '<rect x="680" y="40" width="180" height="84" rx="10" fill="#F4F2EC" stroke="#C2410C" stroke-width="1.5"/>'
+      + '<text x="692" y="62" font-weight="800" font-size="11" fill="#C2410C" letter-spacing="1.2">STEP 4 &middot; ACTION</text>'
+      + '<text x="692" y="84" font-weight="700" fill="#1A1A17">Quarantine flagged</text>'
+      + '<text x="692" y="102" fill="#6B6862">human-approved</text>'
+      + '<text x="692" y="116" fill="#6B6862">&middot; moderation queue</text>'
+      // arrows top row
+      + '<line x1="200" y1="82" x2="240" y2="82" stroke="#C2410C" stroke-width="1.5" marker-end="url(#czarr)"/>'
+      + '<line x1="420" y1="82" x2="460" y2="82" stroke="#C2410C" stroke-width="1.5" marker-end="url(#czarr)"/>'
+      + '<line x1="640" y1="82" x2="680" y2="82" stroke="#C2410C" stroke-width="1.5" marker-end="url(#czarr)"/>'
+      // disagree branch from step 3 down
+      + '<path d="M550 124 L550 180" stroke="#3F7A3F" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#czarr)"/>'
+      + '<text x="558" y="156" font-size="11" font-weight="600" fill="#3F7A3F">judge clicks "Disagree"</text>'
+      // step 5 reflector
+      + '<rect x="240" y="190" width="240" height="100" rx="10" fill="#F4F2EC" stroke="#3F7A3F" stroke-width="1.5"/>'
+      + '<text x="252" y="212" font-weight="800" font-size="11" fill="#3F7A3F" letter-spacing="1.2">STEP 5 &middot; LEARN</text>'
+      + '<text x="252" y="234" font-weight="700" fill="#1A1A17">Reflector (Google ADK)</text>'
+      + '<text x="252" y="252" fill="#6B6862">calls Arize Phoenix MCP &rarr;</text>'
+      + '<text x="252" y="268" fill="#6B6862"><tspan font-family="ui-monospace,Menlo,Consolas,monospace">list-traces</tspan> + judge correction</text>'
+      + '<text x="252" y="284" fill="#6B6862">&rarr; writes ONE new rule</text>'
+      // step 6 phoenix dataset memory
+      + '<rect x="520" y="190" width="240" height="100" rx="10" fill="#F4F2EC" stroke="#3F7A3F" stroke-width="1.5"/>'
+      + '<text x="532" y="212" font-weight="800" font-size="11" fill="#3F7A3F" letter-spacing="1.2">STEP 6 &middot; MEMORY</text>'
+      + '<text x="532" y="234" font-weight="700" fill="#1A1A17">Phoenix Dataset</text>'
+      + '<text x="532" y="252" fill="#6B6862"><tspan font-family="ui-monospace,Menlo,Consolas,monospace">crucible-rules</tspan> (live)</text>'
+      + '<text x="532" y="268" fill="#6B6862">rule persisted as a row</text>'
+      + '<text x="532" y="284" fill="#6B6862">&rarr; next audit reads it back</text>'
+      // arrows reflect -> memory
+      + '<line x1="480" y1="240" x2="520" y2="240" stroke="#3F7A3F" stroke-width="1.5" marker-end="url(#czarr)"/>'
+      // loop back: memory -> step 2 (Detector)
+      + '<path d="M760 240 L880 240 L880 82 L860 82" fill="none" stroke="#3F7A3F" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#czarr)"/>'
+      + '<text x="788" y="160" font-size="11" font-weight="600" fill="#3F7A3F">re-audit uses new rules</text>'
+    + '</g>'
+    + '<text x="20" y="22" font-weight="700" font-size="13" fill="#1A1A17">Methodology &mdash; live audit + judge-in-the-loop, with Arize Phoenix as the agent\'s memory</text>'
+    + '<text x="20" y="312" font-size="11" fill="#6B6862">Every Gemini call (steps 2 &amp; 5) is auto-traced to Phoenix via OpenInference. The Reflector (Google ADK) calls the Arize Phoenix MCP server to read those traces and writes the resulting rule into the <tspan font-family="ui-monospace,Menlo,Consolas,monospace">crucible-rules</tspan> Dataset.</text>'
+    + '</svg>'
+  );
+
   function injectChallenge(afterEl){
     if(document.getElementById('cz-challenge')) return;
     var css = ''
@@ -371,6 +437,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         + '<p class="lede">Pull live reviews from Google, run them through the multi-agent system, and act on the verdicts. Disagree with a call? The Reflector reads the Phoenix traces over MCP and rewrites its rules &mdash; the <b>Detector Intelligence</b> panel shows it getting smarter in real time. Every step is traced in Arize Phoenix.</p>'
       + '</div>'
       + '<div class="figure" style="opacity:1;transform:none"><div class="czx-card">'
+        + '<div class="czx-method" style="margin:0 0 18px 0;border:1px solid #D6D2C6;border-radius:11px;background:#FBFAF7;padding:14px 16px">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
+            + '<div style="font:700 11px/1 sans-serif;letter-spacing:1.5px;text-transform:uppercase;color:#6B6862">How this works &mdash; methodology</div>'
+            + '<button class="czx-chip" id="czxToggleMethod" onclick="(function(){var b=document.getElementById(\'czxMethodBody\'),t=document.getElementById(\'czxToggleMethod\');var o=b.style.display!==\'none\';b.style.display=o?\'none\':\'block\';t.innerHTML=o?\'show diagram &darr;\':\'hide diagram &uarr;\';})()" style="font:600 12px/1 sans-serif;background:none;border:0;color:#C2410C;cursor:pointer;padding:0">show diagram &darr;</button>'
+          + '</div>'
+          + '<div id="czxMethodBody" style="display:none">' + CZX_METHOD_SVG + '</div>'
+        + '</div>'
         + '<div class="czx-hotelrow">'
           + '<input id="czxHotel" placeholder="Enter a hotel, e.g. The Drake, Chicago"/>'
           + '<button class="czx-btn p" id="czxHotelBtn">&#9655; Fetch &amp; audit real reviews</button>'
@@ -402,6 +475,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     wireChallenge();
   }
 
+    function wireMethodToggle(){
+    var btn=document.getElementById('czxToggleMethod'); var body=document.getElementById('czxMethodBody');
+    if(!btn||!body){ setTimeout(wireMethodToggle,150); return; }
+    if(btn.dataset.wired) return; btn.dataset.wired='1';
+    btn.addEventListener('click',function(){
+      var open=body.style.display!=='none';
+      body.style.display=open?'none':'block';
+      btn.innerHTML=open?'show diagram &darr;':'hide diagram &uarr;';
+    });
+  }
   function wireChallenge(){
     var hotel=document.getElementById('czxHotel'), hotelB=document.getElementById('czxHotelBtn'),
         sampleH=document.getElementById('czxSampleHotel'), out=document.getElementById('czxHotelOut'),
@@ -467,14 +550,17 @@ document.addEventListener('DOMContentLoaded', async function() {
       if(flagged.length){
         div.innerHTML='<button class="czx-btn p" id="czxQuar">&#128737; Approve &amp; quarantine '+flagged.length+' flagged review'+(flagged.length>1?'s':'')+'</button>'
           + ' <button class="czx-btn g" id="czxReaudit">&#8635; Re-audit hotel</button>'
+          + ' <button class="czx-btn" id="czxDemoTeach" title="Auto-disagree with the first review so the Reflector writes a rule on camera">&#127908; Demo a teach</button>'
           + '<div id="czxQuarMsg" class="czx-note"></div>';
       } else {
         div.innerHTML='<button class="czx-btn g" id="czxReaudit">&#8635; Re-audit hotel</button>'
+          + ' <button class="czx-btn" id="czxDemoTeach" title="Auto-disagree with the first review so the Reflector writes a rule on camera">&#127908; Demo a teach</button>'
           + '<div id="czxQuarMsg" class="czx-note">No reviews flagged &mdash; nothing to quarantine.</div>';
       }
       out.appendChild(div);
       var qb=document.getElementById('czxQuar'); if(qb) qb.addEventListener('click', quarantine);
       var rb=document.getElementById('czxReaudit'); if(rb) rb.addEventListener('click', function(){ if(lastHotel) fetchHotel(lastHotel, true); });
+      var db=document.getElementById('czxDemoTeach'); if(db) db.addEventListener('click', function(){ if(lastReviews.length){ teachFromReview(lastReviews[0].id); } });
     }
 
     function fetchHotel(q, isReaudit){
